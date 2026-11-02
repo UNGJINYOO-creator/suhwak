@@ -18,7 +18,7 @@ import java.util.zip.ZipOutputStream
  * and the answer log. Restoring replaces them all and restarts the app.
  */
 object Backup {
-    private const val DB = "wordbook.db"
+    private const val DB = "suhwak.db"
 
     fun fileName(): String = "낚아보카_백업_${SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())}.zip"
 

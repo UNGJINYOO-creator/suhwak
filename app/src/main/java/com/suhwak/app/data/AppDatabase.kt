@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [Deck::class, Word::class], version = 8, exportSchema = false)
+@Database(entities = [Deck::class, Word::class], version = 9, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun wordDao(): WordDao
 
@@ -63,6 +63,15 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** 수확중 씨앗(수학 문제) 칸들. */
+        private val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                for (col in listOf("qtype", "choices", "hint", "steps", "level", "sourceId")) {
+                    db.execSQL("ALTER TABLE words ADD COLUMN $col TEXT NOT NULL DEFAULT ''")
+                }
+            }
+        }
+
         /** Closes the database so a backup can replace its file. */
         fun close() = synchronized(this) {
             instance?.close()
@@ -74,8 +83,8 @@ abstract class AppDatabase : RoomDatabase() {
                 instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "wordbook.db",
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8).build().also { instance = it }
+                    "suhwak.db",
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9).build().also { instance = it }
             }
     }
 }

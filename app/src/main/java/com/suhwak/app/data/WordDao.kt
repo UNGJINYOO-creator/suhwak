@@ -40,6 +40,13 @@ interface WordDao {
     @Query("SELECT DISTINCT LOWER(text) FROM words")
     suspend fun allWordTexts(): List<String>
 
+    /** 수확중: 이미 가져온 씨앗의 출처 (다시 가져올 때 중복을 건너뛰려고). */
+    @Query("SELECT sourceId FROM words WHERE sourceId != ''")
+    suspend fun allSourceIds(): List<String>
+
+    @Query("SELECT * FROM decks WHERE name = :name AND isCollection = 0 LIMIT 1")
+    suspend fun findDeckByName(name: String): Deck?
+
     @Insert
     suspend fun insertDeck(deck: Deck): Long
 

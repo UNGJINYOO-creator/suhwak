@@ -557,6 +557,13 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
         }
         if (m == StudyMode.CHOICE && others.size < 3) m = StudyMode.CARD
         if (m != StudyMode.CARD && word.text.length < 2) m = StudyMode.CARD
+        // 수확중: 씨앗(수학 문제)은 언제나 풀기로, 단어는 풀기로 나오지 않게.
+        if (word.isSeed) {
+            m = StudyMode.SOLVE
+            modeNote = null
+        } else if (m == StudyMode.SOLVE) {
+            m = StudyMode.CARD
+        }
         mode = m
         if (m == StudyMode.CHOICE) {
             // Prefer wrong options with the same part of speech so the answer isn't obvious.
@@ -632,6 +639,14 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
         answerMs = System.currentTimeMillis() - questionAt
     }
 
+    /** 씨앗 풀기 결과 (처음에 맞히면 true, 힌트 받고 맞히거나 두 번 틀리면 false). 다음 씨앗을 누르면 [next]로 기록된다. */
+    fun solveAnswered(correct: Boolean, response: String) {
+        touch()
+        answered = correct
+        lastResponse = response
+        answerMs = System.currentTimeMillis() - questionAt
+    }
+
     /** After a quiz answer has been shown. */
     fun next() = mark(if (answered == true) Answer.KNOWN else Answer.UNKNOWN)
 
@@ -648,7 +663,9 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
         canUndo = !test
         // Card swipes are the child's own word, so only quiz answers count for stars and the right rate.
         // A 객관식 answer picked faster than the 찍기 limit (설정, default 1초) is a guess: no stars, no goal, no right rate.
-        val guessed = mode == StudyMode.CHOICE && answerMs in 1 until settings.guessMs
+        val guessed = (mode == StudyMode.CHOICE && answerMs in 1 until settings.guessMs) ||
+            // 수확중 찍기 방지: 객관식 씨앗을 3초 안에 고르면 문제를 안 읽은 것으로 본다
+            (mode == StudyMode.SOLVE && word.qtype == "mc" && answerMs in 1 until 3000)
         if (guessed && answer != Answer.UNKNOWN) celebrate("너무 빨라요! 뜻을 읽고 골라요 🙂", sound = false)
         if (mode != StudyMode.CARD) {
             answerLog.add(
@@ -965,6 +982,13 @@ fun StudyScreen(
                         // key() resets swipe offset, flip animation and typed text for each new question.
                         key(vm.turn) {
                             when (vm.mode) {
+                                StudyMode.SOLVE -> SolveQuiz(
+                                    word = word,
+                                    onAnswered = vm::solveAnswered,
+                                    onNext = vm::next,
+                                    onActivity = vm::touch,
+                                    modifier = Modifier.weight(1f),
+                                )
                                 StudyMode.CHOICE -> ChoiceQuiz(
                                     word = word,
                                     choices = vm.choices,

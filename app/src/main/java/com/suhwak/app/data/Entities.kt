@@ -70,7 +70,23 @@ data class Word(
     val example: String = "",
     /** ⭐ starred by the child to study on its own; separate from [flagged] (needs a fix). */
     val bookmarked: Boolean = false,
-)
+    // ── 수확중 씨앗(수학 문제) ── 단어가 아니라 수학 문제일 때만 채운다. [text] = 문제(수식은 $...$ LaTeX),
+    // [meaning] = 정답(①~⑤ 또는 학생이 칠 수 있는 값), [pos] = 유형 이름, [example] = 풀이 설명.
+    /** "mc" 객관식, "short" 주관식, "" = 낚아보카식 단어 카드. */
+    val qtype: String = "",
+    /** 객관식 보기들, JSON 배열 문자열. */
+    val choices: String = "",
+    /** 정답은 말하지 않는 1문장 힌트 (물 주기). */
+    val hint: String = "",
+    /** 빈칸 풀이 줄들, JSON 배열 문자열. 채울 값은 [[값]]. */
+    val steps: String = "",
+    /** 쉬움 / 보통 / 어려움. */
+    val level: String = "",
+    /** 마클리 문제 은행의 bank_id 같은 원래 출처 (다시 가져올 때 중복 방지). */
+    val sourceId: String = "",
+) {
+    val isSeed: Boolean get() = qtype.isNotEmpty()
+}
 
 /** Deck row with counts for the home screen. */
 data class DeckSummary(

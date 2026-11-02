@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- MathView: 지금 보여주는 보기 상태 (다시 그리지 않고 스크립트로만 바꾸려고) -->
+    <item name="math_state" type="id" />
+</resources>

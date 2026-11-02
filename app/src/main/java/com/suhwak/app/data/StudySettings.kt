@@ -11,6 +11,8 @@ enum class StudyMode(val label: String, val description: String) {
     SPELLING("빈칸 스펠링", "몇 글자가 빠진 단어 채우기"),
     DICTATION("듣고 쓰기", "발음을 듣고 스펠링 쓰기"),
     MIXED("섞기", "여러 방식을 무작위로"),
+    /** 수확중 씨앗(수학 문제) 풀기: 씨앗은 어떤 방식을 골라도 항상 이걸로 나온다. */
+    SOLVE("수학 풀기", "문제를 풀고 수확하기, 틀리면 힌트와 빈칸 풀이"),
 }
 
 /** Which of a deck's cards a session takes, from the 학습 시작 sheet. */

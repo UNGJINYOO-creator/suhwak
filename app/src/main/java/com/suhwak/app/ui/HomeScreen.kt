@@ -51,6 +51,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -244,6 +245,38 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         prefs.edit().putString("sort", s.name).apply()
     }
 
+    /** 마클리(집 PC) 주소. 예: 192.168.0.12:8000 */
+    var makleeAddress: String
+        get() = prefs.getString("makleeAddress", "") ?: ""
+        set(v) = prefs.edit().putString("makleeAddress", v).apply()
+
+    /**
+     * 마클리 문제 은행을 씨앗으로 가져온다. 단원마다 씨앗 창고 하나, 이미 가져온 씨앗은 건너뛴다.
+     * [onDone]에 화면에 보여줄 결과 문장.
+     */
+    fun importSeeds(address: String, onDone: (String) -> Unit) = viewModelScope.launch {
+        val base = com.suhwak.app.net.Maklee.baseUrl(address)
+        makleeAddress = address.trim()
+        val message = runCatching {
+            val text = com.suhwak.app.net.Maklee.fetchBank(base)
+            val decks = com.suhwak.app.data.SeedImport.parse(text)
+            val known = dao.allSourceIds().toHashSet()
+            var added = 0
+            var newDecks = 0
+            for (d in decks) {
+                val fresh = d.seeds.filter { it.sourceId.isEmpty() || it.sourceId !in known }
+                if (fresh.isEmpty()) continue
+                val deckId = dao.findDeckByName(d.name)?.id ?: dao.insertDeck(Deck(name = d.name)).also { newDecks++ }
+                val now = System.currentTimeMillis()
+                dao.insertWords(fresh.map { it.copy(deckId = deckId, addedAt = now) })
+                added += fresh.size
+            }
+            if (added == 0) "새로 가져올 씨앗이 없어요 (이미 다 가져왔어요)"
+            else "씨앗 ${added}개를 가져왔어요" + if (newDecks > 0) " · 새 씨앗 창고 ${newDecks}개" else ""
+        }.getOrElse { "가져오지 못했어요: ${it.message ?: "연결 오류"}\nPC에서 마클리가 켜져 있는지, 같은 와이파이인지 확인해 주세요." }
+        onDone(message)
+    }
+
     fun createEmptyDeck(name: String, onCreated: (Long) -> Unit) = viewModelScope.launch {
         onCreated(dao.insertDeck(Deck(name = name)))
     }
@@ -403,6 +436,7 @@ fun HomeScreen(
         if (!vm.settings.hasPin || unlocked) action() else pending = action
     }
     var showNewDeck by rememberSaveable { mutableStateOf(false) }
+    var showImport by rememberSaveable { mutableStateOf(false) }
     var sortOpen by remember { mutableStateOf(false) }
     var deckToDelete by remember { mutableStateOf<DeckSummary?>(null) }
     var deckToRename by remember { mutableStateOf<DeckSummary?>(null) }
@@ -649,6 +683,10 @@ fun HomeScreen(
                     showAdd = false
                     pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                 }
+                SheetItem(Icons.Default.CloudDownload, "마클리에서 씨앗 가져오기", "집 PC가 미리 만든 문제 은행을 받아와요") {
+                    showAdd = false
+                    showImport = true
+                }
                 SheetItem(Icons.Default.CreateNewFolder, "빈 단어장 만들기", "단어를 직접 입력할게요") {
                     showAdd = false
                     showNewDeck = true
@@ -659,6 +697,20 @@ fun HomeScreen(
                 }
             }
         }
+    }
+    if (showImport) {
+        TextInputDialog(
+            title = "마클리에서 씨앗 가져오기",
+            label = "PC 주소 (마클리 창에 나온 192.168.x.x:8000)",
+            initial = vm.makleeAddress,
+            confirmText = "가져오기",
+            onDismiss = { showImport = false },
+            onConfirm = { address ->
+                showImport = false
+                android.widget.Toast.makeText(context, "씨앗을 가져오는 중이에요…", android.widget.Toast.LENGTH_SHORT).show()
+                vm.importSeeds(address) { msg -> android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show() }
+            },
+        )
     }
     if (showNewDeck) {
         TextInputDialog(
