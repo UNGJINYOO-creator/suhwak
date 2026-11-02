@@ -79,13 +79,13 @@ fun FishBook(fishing: Fishing, giant: GiantState?, onDismiss: () -> Unit) {
             topBar = {
                 Column {
                     AppTopBar(
-                        title = { Text("📖 물고기 도감") },
+                        title = { Text("📖 열매 도감") },
                         navigationIcon = {
                             IconButton(onClick = onDismiss) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "닫기") }
                         },
                     )
                     TabRow(selectedTabIndex = tab) {
-                        listOf("🇰🇷 우리 바다", "🌍 거대 물고기", "🌴 열대 바다").forEachIndexed { i, t ->
+                        listOf("🇰🇷 우리 바다", "🌍 거대 열매", "🌴 열대 바다").forEachIndexed { i, t ->
                             Tab(selected = tab == i, onClick = { tab = i }, text = { FitText(t, MaterialTheme.typography.labelLarge) })
                         }
                     }
@@ -143,7 +143,7 @@ private fun LazyGridScope.header(key: String, title: String, note: String? = nul
 private fun LazyGridScope.seaTab(fishing: Fishing, onOpen: (Detail) -> Unit) {
     item(key = "seaNote", span = { GridItemSpan(maxLineSpan) }) {
         Text(
-            "많이 맞히고 빨리 낚을수록 희귀한 물고기가 걸려요. 한 바다를 다 모으면 선물 물고기 ${Fishing.SEA_GIFT}마리! " +
+            "많이 맞히고 빨리 수확할수록 희귀한 열매가 걸려요. 한 바다를 다 모으면 선물 열매 ${Fishing.SEA_GIFT}개! " +
                 "테두리 색: 회색 흔함 · 초록 보통 · 파랑 희귀 · 금색 전설",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.outline,
@@ -161,16 +161,16 @@ private fun LazyGridScope.seaTab(fishing: Fishing, onOpen: (Detail) -> Unit) {
         kinds.forEach { f ->
             val count = fishing.count(f)
             item(key = "fish_${f.key}") {
-                Tile(f.emoji, if (count > 0) f.name else "???", if (count > 0) "${count}마리" else Fishing.rarityNames[f.rarity], count > 0, rarityColors[f.rarity], f.rarity == 3) {
+                Tile(f.emoji, if (count > 0) f.name else "???", if (count > 0) "${count}개" else Fishing.rarityNames[f.rarity], count > 0, rarityColors[f.rarity], f.rarity == 3) {
                     onOpen(
                         if (count > 0) {
                             Detail(
                                 f.emoji, f.name, "${sea.emoji} ${sea.title} · ${Fishing.rarityNames[f.rarity]}",
-                                listOf("🎣 ${count}마리 낚았어요", "🏆 최고 기록 ${Fishing.formatKg(fishing.best(f))}", "💡 ${f.fact}"),
+                                listOf("🧺 ${count}개 수확했어요", "🏆 최고 기록 ${Fishing.formatKg(fishing.best(f))}", "💡 ${f.fact}"),
                             )
                         } else {
-                            Detail("❓", "아직 못 낚았어요", "${sea.emoji} ${sea.title} · ${Fishing.rarityNames[f.rarity]}",
-                                listOf(if (f.rarity >= 2) "✨ 많이 맞히고 빨리 낚으면 잘 걸려요" else "🎣 ${sea.title}에서 낚시하면 만날 수 있어요"))
+                            Detail("❓", "아직 못 수확했어요", "${sea.emoji} ${sea.title} · ${Fishing.rarityNames[f.rarity]}",
+                                listOf(if (f.rarity >= 2) "✨ 많이 맞히고 빨리 낚으면 잘 걸려요" else "🧺 ${sea.title}에서 수확하면 만날 수 있어요"))
                         },
                     )
                 }
@@ -184,7 +184,7 @@ private fun LazyGridScope.giantTab(giant: GiantState?, store: Giant, onOpen: (De
     item(key = "voyage", span = { GridItemSpan(maxLineSpan) }) {
         Column {
             Text(
-                "🏆 거대 물고기 ${giant?.caught ?: 0}/${Giant.species.size} · 중학 영단어 100개마다 배가 다음 바다로 항해해요",
+                "🏆 거대 열매 ${giant?.caught ?: 0}/${Giant.species.size} · 기본 씨앗 100개마다 배가 다음 바다로 항해해요",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.outline,
             )
@@ -210,14 +210,14 @@ private fun LazyGridScope.giantTab(giant: GiantState?, store: Giant, onOpen: (De
                             Detail(
                                 g.emoji, g.name, "${ocean.emoji} ${ocean.title} · ${g.english}",
                                 listOf(
-                                    "📅 " + SimpleDateFormat("M월 d일", Locale.KOREA).format(Date(at)) + "에 낚았어요",
+                                    "📅 " + SimpleDateFormat("M월 d일", Locale.KOREA).format(Date(at)) + "에 수확했어요",
                                     "⚖️ ${Fishing.formatKg(store.kg(i))}",
                                     "💡 ${g.fact}",
                                 ),
                             )
                         } else {
-                            Detail("❓", "${i + 1}번째 거대 물고기", "${ocean.emoji} ${ocean.title}",
-                                listOf("단어 ${i * Giant.BLOCK + 1}~${(i + 1) * Giant.BLOCK}번을 외우면 만날 수 있어요" + if (giant?.index == i) " · 지금 사냥 중!" else ""))
+                            Detail("❓", "${i + 1}번째 거대 열매", "${ocean.emoji} ${ocean.title}",
+                                listOf("문제 ${i * Giant.BLOCK + 1}~${(i + 1) * Giant.BLOCK}번을 외우면 만날 수 있어요" + if (giant?.index == i) " · 지금 사냥 중!" else ""))
                         },
                     )
                 }
@@ -230,8 +230,8 @@ private fun LazyGridScope.tropicalTab(giant: GiantState?) {
     val count = giant?.tropical ?: 0
     header(
         "tropical",
-        "🌴 열대 바다 ${count}마리",
-        "직접 넣은 단어를 100개 외울 때마다 열대 물고기가 한 마리씩 찾아와요 (다음까지 ${Giant.BLOCK - (giant?.extraLearned ?: 0) % Giant.BLOCK}단어).",
+        "🌴 열대 바다 ${count}개",
+        "직접 넣은 문제를 100개 외울 때마다 열대 열매가 하나씩 찾아와요 (다음까지 ${Giant.BLOCK - (giant?.extraLearned ?: 0) % Giant.BLOCK}문제).",
     )
     // Every kind once, with how many times it has come.
     Giant.tropical.forEachIndexed { i, t ->
@@ -239,7 +239,7 @@ private fun LazyGridScope.tropicalTab(giant: GiantState?) {
         val emoji = t.substringBefore(' ')
         val name = t.substringAfter(' ')
         item(key = "tropical_$i") {
-            Tile(emoji, if (times > 0) name else "???", if (times > 0) "${times}마리" else "", times > 0, Color(0xFF00ACC1), false) {}
+            Tile(emoji, if (times > 0) name else "???", if (times > 0) "${times}개" else "", times > 0, Color(0xFF00ACC1), false) {}
         }
     }
 }

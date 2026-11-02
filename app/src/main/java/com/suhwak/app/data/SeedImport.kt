@@ -43,7 +43,8 @@ object SeedImport {
         if (mc && choices.length() < 2) return null
         return Word(
             deckId = 0,
-            text = question,
+            text = MathText.plain(question),
+            question = question,
             meaning = answer,
             pos = p.optString("concept").trim(),
             example = p.optString("explanation").trim(),

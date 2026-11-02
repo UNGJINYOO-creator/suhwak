@@ -57,7 +57,7 @@ private val WrongRed = Color(0xFFC62828)
 /** Meaning with its part of speech, used as the question for choice/spelling quizzes. */
 @Composable
 private fun MeaningPrompt(word: Word) {
-    PosMeaning(word.pos, word.meaning.ifBlank { "(뜻 없음)" }, fontSize = 20.sp, badgeSize = 14.sp)
+    PosMeaning(word.pos, word.meaning.ifBlank { "(정답 없음)" }, fontSize = 20.sp, badgeSize = 14.sp)
 }
 
 /** Correct answers move on by themselves; wrong ones wait so the right answer can be read. */
@@ -88,7 +88,7 @@ fun ChoiceQuiz(
 ) {
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
-            if (reverse) "알맞은 뜻을 고르세요" else "알맞은 단어를 고르세요",
+            if (reverse) "알맞은 정답을 고르세요" else "알맞은 문제를 고르세요",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.outline,
         )
@@ -183,7 +183,7 @@ fun TypingQuiz(
                 Text(word.meaning, fontSize = 18.sp, textAlign = TextAlign.Center)
             }
         } else {
-            Text("빈칸을 채워 단어를 쓰세요", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+            Text("빈칸을 채워 문제를 쓰세요", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
             Spacer(Modifier.height(6.dp))
             MeaningPrompt(word)
         }
@@ -262,7 +262,7 @@ fun TypingQuiz(
                 }
             } else {
                 Text(
-                    "남은 글자 ${blanks - typed.length}개 · 키보드가 없으면 단어를 누르세요",
+                    "남은 글자 ${blanks - typed.length}개 · 키보드가 없으면 문제를 누르세요",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline,
                 )

@@ -22,7 +22,7 @@ import androidx.compose.ui.unit.dp
 
 /** 뜻 가리기: what a word list hides until a row is tapped, like covering a paper list with a hand. */
 enum class ListCover(val label: String) {
-    NONE("모두 보기"), MEANING("뜻 가리기"), WORD("단어 가리기");
+    NONE("모두 보기"), MEANING("정답 가리기"), WORD("문제 가리기");
 
     fun next() = entries[(ordinal + 1) % entries.size]
 

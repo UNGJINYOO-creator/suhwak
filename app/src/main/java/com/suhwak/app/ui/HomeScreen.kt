@@ -220,8 +220,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         fishOpen = !timeLeft && !wordsLeft && fishing.triesLeft > 0
         fishLine = when {
             timeLeft || wordsLeft -> "🔒 오늘 목표를 채우면 열려요"
-            fishing.caughtToday -> "오늘 ${fishing.caughtFishToday} 낚았어요! 🎣"
-            fishing.triesLeft <= 0 -> "내일 또 낚으러 와요 🎣"
+            fishing.caughtToday -> "오늘 ${fishing.caughtFishToday} 수확했어요! 🧺"
+            fishing.triesLeft <= 0 -> "내일 또 수확하러 와요 🧺"
             else -> "열렸어요! 도전해 보세요" + fishing.triesNote
         }
         goalWords = settings.dailyWords
@@ -360,23 +360,23 @@ private fun LevelDialog(level: Int, known: Int, total: Int, stars: Int, totalMs:
         },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("📊 지금까지 ${hoursText(totalMs)} 공부했고, 전체 단어 ${total}개 중 ${known}개($percent%)를 외웠어요.", style = MaterialTheme.typography.bodyMedium)
+                Text("📊 지금까지 ${hoursText(totalMs)} 공부했고, 전체 문제 ${total}개 중 ${known}개($percent%)를 외웠어요.", style = MaterialTheme.typography.bodyMedium)
                 Spacer(Modifier.height(4.dp))
-                Text("🐟 낚은 물고기는 뭐예요?", style = MaterialTheme.typography.titleSmall)
+                Text("🍎 수확한 열매는 뭐예요?", style = MaterialTheme.typography.titleSmall)
                 Text(
-                    "단어 하나를 외우면(객관식·빈칸·듣고 쓰기에서 그날 처음 맞히면) 물고기 한 마리를 낚아요. " +
-                        "7일 연속 출석하면 🏅 배지와 선물 물고기 20마리! 낚은 물고기는 복습·통계 탭에서 부모님이 정한 보상 쿠폰으로 바꿀 수 있어요. " +
-                        "지금 가진 물고기는 ${stars}마리예요.",
+                    "문제 하나를 외우면(객관식·빈칸·듣고 쓰기에서 그날 처음 맞히면) 열매 하나를 수확해요. " +
+                        "7일 연속 출석하면 🏅 배지와 선물 열매 20개! 수확한 열매는 복습·통계 탭에서 부모님이 정한 보상 쿠폰으로 바꿀 수 있어요. " +
+                        "지금 가진 열매는 ${stars}개예요.",
                     style = MaterialTheme.typography.bodySmall,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text("🏆 레벨", style = MaterialTheme.typography.titleSmall)
                 Text(
-                    "앱에 있는 전체 단어 중 몇 %를 외웠는지로 등급이 정해져요. 0%면 Lv.1, 모든 단어를 외워 100%가 되면 최고 등급 Lv.7이에요. " +
-                        "외운 단어는 서로 다른 두 날에 문제를 맞힌 단어예요. 하루 반짝 맞힌 건 아직 안 쳐요. " +
-                        "등급 안에서는 ★ 세 칸이 차오르고, 레벨이 오르면 선물 물고기(레벨×10마리)를 받아요. " +
-                        "단어를 새로 추가해 %가 내려가도 한 번 오른 등급은 내려가지 않아요. " +
-                        "레벨이 오르면 칭호가 바뀌고 단어장 표지에 쓸 새 이모지가 열려요.",
+                    "앱에 있는 전체 문제 중 몇 %를 외웠는지로 등급이 정해져요. 0%면 Lv.1, 모든 문제를 외워 100%가 되면 최고 등급 Lv.7이에요. " +
+                        "외운 문제는 서로 다른 두 날에 문제를 맞힌 문제예요. 하루 반짝 맞힌 건 아직 안 쳐요. " +
+                        "등급 안에서는 ★ 세 칸이 차오르고, 레벨이 오르면 선물 열매(레벨×10개)를 받아요. " +
+                        "문제를 새로 추가해 %가 내려가도 한 번 오른 등급은 내려가지 않아요. " +
+                        "레벨이 오르면 칭호가 바뀌고 문제집 표지에 쓸 새 이모지가 열려요.",
                     style = MaterialTheme.typography.bodySmall,
                 )
                 (1..Levels.titles.size).forEach { n ->
@@ -403,7 +403,7 @@ private fun LevelDialog(level: Int, known: Int, total: Int, stars: Int, totalMs:
                         )
                     }
                 }
-                Text("오늘도 화이팅! 🎣", style = MaterialTheme.typography.bodySmall)
+                Text("오늘도 화이팅! 🧺", style = MaterialTheme.typography.bodySmall)
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("좋아요") } },
@@ -483,7 +483,7 @@ fun HomeScreen(
                 Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 8.dp) {
                     Row(Modifier.fillMaxWidth().padding(16.dp, 10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            if (selected.size < 2) "합칠 단어장을 2개 이상 골라요" else "${selected.size}개 골랐어요",
+                            if (selected.size < 2) "합칠 문제집을 2개 이상 골라요" else "${selected.size}개 골랐어요",
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f),
                         )
@@ -530,8 +530,8 @@ fun HomeScreen(
                     ) {
                         val ink = com.suhwak.app.ui.theme.Sea.Ink
                         Column(Modifier.padding(14.dp)) {
-                            Text("🎣", fontSize = 26.sp)
-                            FitText("오늘의 낚시", MaterialTheme.typography.titleMedium.copy(color = ink, fontWeight = FontWeight.Bold), align = TextAlign.Start)
+                            Text("🧺", fontSize = 26.sp)
+                            FitText("오늘의 수확", MaterialTheme.typography.titleMedium.copy(color = ink, fontWeight = FontWeight.Bold), align = TextAlign.Start)
                             Text(vm.fishLine, style = MaterialTheme.typography.bodySmall, color = ink, modifier = Modifier.padding(top = 4.dp))
                         }
                     }
@@ -547,7 +547,7 @@ fun HomeScreen(
                                 Text("⛵", fontSize = 26.sp)
                                 FitText("대양 원정", MaterialTheme.typography.titleMedium.copy(color = com.suhwak.app.ui.theme.Sea.Ink, fontWeight = FontWeight.Bold), align = TextAlign.Start)
                                 if (f == null) {
-                                    Text("18마리 완성! 🏆", style = MaterialTheme.typography.bodySmall, color = com.suhwak.app.ui.theme.Sea.Ink)
+                                    Text("18개 완성! 🏆", style = MaterialTheme.typography.bodySmall, color = com.suhwak.app.ui.theme.Sea.Ink)
                                 } else {
                                     FitText("${f.ocean.title} · ${f.emoji} ${f.name}", MaterialTheme.typography.bodySmall.copy(color = com.suhwak.app.ui.theme.Sea.Soft), align = TextAlign.Start)
                                     Spacer(Modifier.height(6.dp))
@@ -581,7 +581,7 @@ fun HomeScreen(
                             Column(Modifier.weight(1f).padding(start = 12.dp)) {
                                 Text("오답노트 ${vm.wrongCount}개", style = MaterialTheme.typography.titleMedium, color = Color(0xFF8A2A0A))
                                 Text(
-                                    "2번 틀린 단어가 모여요 · 3번 연속 맞히면 빠져요",
+                                    "2번 틀린 문제가 모여요 · 3번 연속 맞히면 빠져요",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = Color(0xFF8A2A0A),
                                 )
@@ -597,17 +597,17 @@ fun HomeScreen(
             if (decks.isEmpty()) {
                 item(key = "empty", span = { GridItemSpan(maxLineSpan) }) {
                     Card(
-                        onClick = { guard { showAdd = true } },
+                        onClick = { guard { showImport = true } },
                         shape = MaterialTheme.shapes.large,
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("📷", fontSize = 40.sp)
+                            Text("🌱", fontSize = 40.sp)
                             Spacer(Modifier.height(8.dp))
-                            Text("사진으로 첫 단어장 만들기", style = MaterialTheme.typography.titleMedium)
+                            Text("마클리에서 씨앗 가져오기", style = MaterialTheme.typography.titleMedium)
                             Text(
-                                "영어가 있는 책이나 화면을 찍으면 단어를 찾아 드려요",
+                                "집 PC가 문제집으로 미리 만든 문제를 받아와요",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.outline,
                             )
@@ -618,7 +618,7 @@ fun HomeScreen(
                 item(key = "header", span = { GridItemSpan(maxLineSpan) }) {
                     Row(Modifier.padding(start = 4.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            if (selecting) "합칠 단어장을 눌러서 골라요" else "단어장 ${decks.size}개",
+                            if (selecting) "합칠 문제집을 눌러서 골라요" else "문제집 ${decks.size}개",
                             style = MaterialTheme.typography.titleSmall,
                             color = if (selecting) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                             modifier = Modifier.weight(1f),
@@ -654,7 +654,7 @@ fun HomeScreen(
                 }
                 item(key = "hint", span = { GridItemSpan(maxLineSpan) }) {
                     Text(
-                        "단어장을 누르면 바로 학습해요 · 목록은 오른쪽 위 '목록' · 길게 누르면 이름·표지 바꾸기, 합치기, 삭제",
+                        "문제집을 누르면 바로 학습해요 · 목록은 오른쪽 위 '목록' · 길게 누르면 이름·표지 바꾸기, 합치기, 삭제",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.outline,
                         modifier = Modifier.padding(top = 4.dp, start = 4.dp),
@@ -669,29 +669,19 @@ fun HomeScreen(
         ModalBottomSheet(onDismissRequest = { showAdd = false }, containerColor = MaterialTheme.colorScheme.surface) {
             Column(Modifier.navigationBarsPadding().padding(bottom = 16.dp)) {
                 Text(
-                    "단어 추가",
+                    "씨앗 추가",
                     style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
                 )
-                SheetItem(Icons.Default.CameraAlt, "사진 찍기", "책이나 프린트를 바로 찍어요") {
-                    showAdd = false
-                    val uri = newPhotoUri(context)
-                    pendingUri = uri.toString()
-                    takePicture.launch(uri)
-                }
-                SheetItem(Icons.Default.PhotoLibrary, "앨범에서 고르기", "사진이나 스크린샷, 여러 장 한 번에 골라도 돼요") {
-                    showAdd = false
-                    pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                }
                 SheetItem(Icons.Default.CloudDownload, "마클리에서 씨앗 가져오기", "집 PC가 미리 만든 문제 은행을 받아와요") {
                     showAdd = false
                     showImport = true
                 }
-                SheetItem(Icons.Default.CreateNewFolder, "빈 단어장 만들기", "단어를 직접 입력할게요") {
+                SheetItem(Icons.Default.CreateNewFolder, "빈 문제집 만들기", "문제를 직접 입력할게요") {
                     showAdd = false
                     showNewDeck = true
                 }
-                SheetItem(Icons.Default.CollectionsBookmark, "종합단어장 만들기", "여러 단어장을 묶어서 한꺼번에 학습해요") {
+                SheetItem(Icons.Default.CollectionsBookmark, "종합 문제집 만들기", "여러 문제집을 묶어서 한꺼번에 학습해요") {
                     showAdd = false
                     showNewCollection = true
                 }
@@ -714,33 +704,33 @@ fun HomeScreen(
     }
     if (showNewDeck) {
         TextInputDialog(
-            title = "새 단어장",
+            title = "새 문제집",
             label = "이름",
             initial = "",
             confirmText = "만들기",
             onDismiss = { showNewDeck = false },
             onConfirm = { name ->
                 showNewDeck = false
-                vm.createEmptyDeck(name.ifBlank { "새 단어장" }, onOpenDeck)
+                vm.createEmptyDeck(name.ifBlank { "새 문제집" }, onOpenDeck)
             },
         )
     }
     if (showNewCollection) {
         TextInputDialog(
-            title = "새 종합단어장",
+            title = "새 종합 문제집",
             label = "이름",
-            initial = "종합 단어장",
+            initial = "종합 문제집",
             confirmText = "만들기",
             onDismiss = { showNewCollection = false },
             onConfirm = { name ->
                 showNewCollection = false
-                vm.createCollection(name.ifBlank { "종합 단어장" })
+                vm.createCollection(name.ifBlank { "종합 문제집" })
             },
         )
     }
     deckToLink?.let { deck ->
         CollectionDialog(
-            title = "종합단어장에 넣기",
+            title = "종합 문제집에 넣기",
             collections = collections,
             current = deck.collectionId,
             onPick = { c -> vm.link(deck.id, c); deckToLink = null },
@@ -770,7 +760,7 @@ fun HomeScreen(
     deckToRename?.let { deck ->
         TextInputDialog(
             title = "이름 바꾸기",
-            label = "단어장 이름",
+            label = "문제집 이름",
             initial = deck.name,
             confirmText = "저장",
             onDismiss = { deckToRename = null },
@@ -793,7 +783,7 @@ fun HomeScreen(
     }
     pending?.let { action ->
         PinConfirmDialog(
-            text = "단어를 추가하거나 단어장을 바꾸려면 비밀번호를 입력하세요.",
+            text = "문제를 추가하거나 문제집을 바꾸려면 비밀번호를 입력하세요.",
             check = vm.settings::checkPin,
             onDismiss = { pending = null },
             onConfirm = { unlocked = true; pending = null; action() },
@@ -804,15 +794,15 @@ fun HomeScreen(
         // With a settings password, deleting a deck asks for it too, so a child can't delete one by accident.
         if (vm.settings.hasPin) {
             PinConfirmDialog(
-                text = "'${deck.name}' 단어장과 단어 ${deck.wordCount}개를 삭제하려면 비밀번호를 입력하세요.",
+                text = "'${deck.name}' 문제집과 문제 ${deck.wordCount}개를 삭제하려면 비밀번호를 입력하세요.",
                 check = vm.settings::checkPin,
                 onDismiss = { deckToDelete = null },
                 onConfirm = { vm.deleteDeck(deck.id); deckToDelete = null },
             )
         } else {
             ConfirmDialog(
-                text = if (deck.isCollection) "'${deck.name}' 종합단어장을 삭제할까요? 묶여 있던 단어장과 단어는 그대로 남아요."
-                else "'${deck.name}' 단어장과 단어 ${deck.wordCount}개를 삭제할까요?",
+                text = if (deck.isCollection) "'${deck.name}' 종합 문제집을 삭제할까요? 묶여 있던 문제집과 문제는 그대로 남아요."
+                else "'${deck.name}' 문제집과 문제 ${deck.wordCount}개를 삭제할까요?",
                 onDismiss = { deckToDelete = null },
                 onConfirm = { vm.deleteDeck(deck.id); deckToDelete = null },
             )
@@ -850,14 +840,14 @@ private fun HomeHeader(level: Int, known: Int, total: Int, stars: Int, totalMs: 
         Column(Modifier.align(Alignment.TopStart).padding(top = 6.dp)) {
             Text(
                 buildAnnotatedString {
-                    append("낚아")
+                    append("수확해")
                     withStyle(SpanStyle(color = com.suhwak.app.ui.theme.Sea.Mint)) { append("보카") }
                 },
                 color = com.suhwak.app.ui.theme.Sea.Accent,
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Black,
             )
-            Text("오늘도 단어\n낚으러 가볼까? 🐟", color = com.suhwak.app.ui.theme.Sea.Soft, style = MaterialTheme.typography.bodyMedium)
+            Text("오늘도 문제\n수확하러 가볼까? 🍎", color = com.suhwak.app.ui.theme.Sea.Soft, style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(10.dp))
             // Who the child is: the level badge (today's numbers live in the card below). Tap for the level popup.
             Column(
@@ -876,7 +866,7 @@ private fun HomeHeader(level: Int, known: Int, total: Int, stars: Int, totalMs: 
                 )
                 FitText(Levels.title(level), MaterialTheme.typography.titleSmall.copy(color = com.suhwak.app.ui.theme.Sea.Ink, fontWeight = FontWeight.Bold), align = TextAlign.Start)
                 FitText(
-                    "🐟 ${stars}마리 · 전체 ${Levels.percent(known, total)}% 외움",
+                    "🍎 ${stars}개 · 전체 ${Levels.percent(known, total)}% 외움",
                     MaterialTheme.typography.labelSmall.copy(color = com.suhwak.app.ui.theme.Sea.Soft),
                     align = TextAlign.Start,
                 )
@@ -944,9 +934,9 @@ private fun TodayCard(
                     info = "⏱ 오늘 공부" to (
                         "오늘 공부한 시간이에요" + (if (goalMs > 0) ". 동그라미는 하루 최소 학습 시간 ${minutesText(goalMs)} 중 얼마나 했는지예요" else "") +
                             ". 화면을 한동안 안 건드리면 시간이 멈춰요.\n\n" +
-                            "📚 복습 ${dueCount}개: 잊을 때쯤 다시 보는 단어예요.\n" +
-                            "🆕 새 단어 ${newCount}개: 오늘 처음 배울 단어예요.\n" +
-                            "🔥 ${streak}일 연속: 하루도 안 빠지고 공부한 날이에요. 7일마다 배지와 선물 물고기를 받아요."
+                            "📚 복습 ${dueCount}개: 잊을 때쯤 다시 보는 문제예요.\n" +
+                            "🆕 새 문제 ${newCount}개: 오늘 처음 배울 문제예요.\n" +
+                            "🔥 ${streak}일 연속: 하루도 안 빠지고 공부한 날이에요. 7일마다 배지와 선물 열매를 받아요."
                         )
                 },
                 verticalAlignment = Alignment.CenterVertically,
@@ -973,7 +963,7 @@ private fun TodayCard(
                         style = MaterialTheme.typography.titleMedium,
                     )
                     Text(
-                        "복습 ${dueCount}개 · 새 단어 ${newCount}개 · 🔥 ${streak}일 연속",
+                        "복습 ${dueCount}개 · 새 문제 ${newCount}개 · 🔥 ${streak}일 연속",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline,
                     )
@@ -983,15 +973,15 @@ private fun TodayCard(
                 Spacer(Modifier.height(12.dp))
                 Row(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable {
-                        info = "🧠 오늘 외운 단어" to (
-                            "오늘 객관식·빈칸·듣고 쓰기 문제에서 맞힌 서로 다른 단어 수예요. 뜻 카드 넘기기는 세지 않아요.\n\n" +
-                                "하루 목표는 ${goalWords}개예요. 목표를 채우면 🎣 오늘의 낚시가 열리고, " +
-                                "외운 한 단어마다 물고기 한 마리를 낚아요."
+                        info = "🧠 오늘 외운 문제" to (
+                            "오늘 객관식·빈칸·듣고 쓰기 문제에서 맞힌 서로 다른 문제 수예요. 정답 카드 넘기기는 세지 않아요.\n\n" +
+                                "하루 목표는 ${goalWords}개예요. 목표를 채우면 🧺 오늘의 수확가 열리고, " +
+                                "외운 한 문제마다 열매 하나를 수확해요."
                             )
                     },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("🧠 오늘 외운 단어", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                    Text("🧠 오늘 외운 문제", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.weight(1f))
                     Text(
                         if (learned >= goalWords) "$learned / $goalWords 달성 🎉" else "$learned / $goalWords",
@@ -1005,12 +995,12 @@ private fun TodayCard(
             Spacer(Modifier.height(12.dp))
             if (goalsDone) {
                 // Goals met: keep going with the next new words.
-                SecondaryButton("📚 새 단어 더 배우기", onToday)
+                SecondaryButton("📚 새 문제 더 배우기", onToday)
             } else if (dueCount + newCount > 0) {
                 PrimaryButton("오늘 학습 시작", onToday)
             } else {
                 Text(
-                    "오늘 할 단어를 다 했어요 👍",
+                    "오늘 할 문제를 다 했어요 👍",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -1112,21 +1102,21 @@ private fun DeckTile(
             )
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            DropdownMenuItem(text = { Text("단어 목록·편집") }, leadingIcon = { Icon(Icons.AutoMirrored.Filled.List, null) }, onClick = { menu = false; onOpen() })
+            DropdownMenuItem(text = { Text("문제 목록·편집") }, leadingIcon = { Icon(Icons.AutoMirrored.Filled.List, null) }, onClick = { menu = false; onOpen() })
             DropdownMenuItem(text = { Text("이름 바꾸기") }, leadingIcon = { Icon(Icons.Default.Edit, null) }, onClick = { menu = false; onRename() })
             DropdownMenuItem(text = { Text("표지 바꾸기") }, leadingIcon = { Icon(Icons.Default.Palette, null) }, onClick = { menu = false; onStyle() })
             if (onMerge != null) {
-                DropdownMenuItem(text = { Text("다른 단어장과 합치기") }, leadingIcon = { Icon(Icons.AutoMirrored.Filled.CallMerge, null) }, onClick = { menu = false; onMerge() })
+                DropdownMenuItem(text = { Text("다른 문제집과 합치기") }, leadingIcon = { Icon(Icons.AutoMirrored.Filled.CallMerge, null) }, onClick = { menu = false; onMerge() })
             }
             if (!deck.isCollection) {
                 DropdownMenuItem(
-                    text = { Text(if (deck.collectionId > 0) "종합단어장 바꾸기·빼기" else "종합단어장에 넣기") },
+                    text = { Text(if (deck.collectionId > 0) "종합 문제집 바꾸기·빼기" else "종합 문제집에 넣기") },
                     leadingIcon = { Icon(Icons.Default.CollectionsBookmark, null) },
                     onClick = { menu = false; onLink() },
                 )
             }
             DropdownMenuItem(
-                text = { Text("단어장 삭제", color = MaterialTheme.colorScheme.error) },
+                text = { Text("문제집 삭제", color = MaterialTheme.colorScheme.error) },
                 leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
                 onClick = { menu = false; onDelete() },
             )
@@ -1152,10 +1142,10 @@ private fun MergeDialog(
     val others = decks.filter { it.id != target }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("단어장 합치기") },
+        title = { Text("문제집 합치기") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("어느 단어장으로 합칠까요?", style = MaterialTheme.typography.titleSmall)
+                Text("어느 문제집으로 합칠까요?", style = MaterialTheme.typography.titleSmall)
                 decks.forEach { d ->
                     Row(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { target = d.id }.padding(vertical = 2.dp),
@@ -1167,15 +1157,15 @@ private fun MergeDialog(
                 }
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    others.joinToString(", ") { "'${it.name}'" } + "의 단어가 '$targetName'(으)로 들어가요. " +
-                        "외운 기록과 복습 날짜는 그대로 따라가고, 빈 단어장은 없어져요.",
+                    others.joinToString(", ") { "'${it.name}'" } + "의 문제가 '$targetName'(으)로 들어가요. " +
+                        "외운 기록과 복습 날짜는 그대로 따라가고, 빈 문제집은 없어져요.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Text(
                     when (val n = dup) {
-                        null -> "겹치는 단어를 찾는 중…"
-                        0 -> "겹치는 단어는 없어요."
-                        else -> "두 곳에 다 있는 단어 ${n}개는 더 많이 공부한 쪽 하나만 남겨요."
+                        null -> "겹치는 문제를 찾는 중…"
+                        0 -> "겹치는 문제는 없어요."
+                        else -> "두 곳에 다 있는 문제 ${n}개는 더 많이 공부한 쪽 하나만 남겨요."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.outline,

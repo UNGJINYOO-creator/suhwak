@@ -89,7 +89,7 @@ fun DeckCheckDialog(deckId: Long?, onDismiss: () -> Unit) {
             Column(Modifier.padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        if (deckId == null) "전체 단어장 점검" else "단어장 점검",
+                        if (deckId == null) "전체 문제집 점검" else "문제집 점검",
                         style = MaterialTheme.typography.titleLarge,
                         modifier = Modifier.weight(1f),
                     )
@@ -99,12 +99,12 @@ fun DeckCheckDialog(deckId: Long?, onDismiss: () -> Unit) {
                 if (list == null) {
                     Row(Modifier.padding(vertical = 24.dp), verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(Modifier.padding(end = 12.dp))
-                        Text("스펠링과 뜻을 확인하는 중…")
+                        Text("스펠링과 정답을 확인하는 중…")
                     }
                     return@Column
                 }
                 if (list.isEmpty()) {
-                    Text("문제가 없어요. 오타나 이상한 뜻을 찾지 못했어요.", modifier = Modifier.padding(vertical = 24.dp))
+                    Text("문제가 없어요. 오타나 이상한 정답을 찾지 못했어요.", modifier = Modifier.padding(vertical = 24.dp))
                     return@Column
                 }
                 val open = list.filter { it.ignoreKey !in done }
@@ -115,7 +115,7 @@ fun DeckCheckDialog(deckId: Long?, onDismiss: () -> Unit) {
                     color = MaterialTheme.colorScheme.primary,
                 )
                 Text(
-                    "고쳐도 외운 기록은 그대로예요. '그대로 두기'를 누른 단어는 다음 점검 때 다시 묻지 않아요. 품사·스펠링·뜻은 낚아보카 사전(중학 1800 단어)과 영어 단어 목록으로 확인해요.",
+                    "고쳐도 외운 기록은 그대로예요. '그대로 두기'를 누른 문제는 다음 점검 때 다시 묻지 않아요. 품사·스펠링·정답은 기본 문제(중학 1800 문제)과 수학 문제 목록으로 확인해요.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.outline,
                     modifier = Modifier.padding(vertical = 4.dp),
@@ -160,16 +160,16 @@ private fun IssueRow(i: DeckCheck.Issue, status: String?, deckName: String?, ena
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             PosBadge(w.pos, Modifier.padding(end = 6.dp))
-            Text(w.meaning.ifBlank { "(뜻 없음)" }, style = MaterialTheme.typography.bodyMedium)
+            Text(w.meaning.ifBlank { "(정답 없음)" }, style = MaterialTheme.typography.bodyMedium)
         }
         val fix = when {
-            i.delete -> "이 단어를 지워요 (같은 단어 중 공부를 더 한 쪽을 남겨요)"
+            i.delete -> "이 문제를 지워요 (같은 문제 중 공부를 더 한 쪽을 남겨요)"
             i.hasFix -> listOfNotNull(
                 i.text?.let { "스펠링 → $it" },
                 i.pos?.takeIf { it != w.pos }?.let { "품사 → ${posName(it)}" },
-                i.meaning?.let { "뜻 → $it" },
+                i.meaning?.let { "정답 → $it" },
             ).joinToString("\n").ifEmpty { "'고쳐야 해요' 표시를 지워요" }
-            else -> "고칠 말을 찾지 못했어요. 단어 목록에서 직접 고쳐 주세요."
+            else -> "고칠 말을 찾지 못했어요. 문제 목록에서 직접 고쳐 주세요."
         }
         Text(fix, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 4.dp))
         if (status != null) {

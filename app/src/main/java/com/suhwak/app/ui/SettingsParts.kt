@@ -169,7 +169,7 @@ fun RewardEditor(game: Game, onChange: () -> Unit = {}) {
                     color = if (editing == i) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f),
                 )
-                Text("🐟 ${r.cost}마리", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                Text("🍎 ${r.cost}개", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
                 TextButton(onClick = { editing = i; name = r.name; cost = r.cost.toString() }) { Text("수정") }
                 TextButton(onClick = {
                     rewards = rewards.filterIndexed { j, _ -> j != i }
@@ -194,7 +194,7 @@ fun RewardEditor(game: Game, onChange: () -> Unit = {}) {
             OutlinedTextField(
                 value = cost,
                 onValueChange = { v -> cost = v.filter { it.isDigit() }.take(4) },
-                label = { Text("물고기") },
+                label = { Text("열매") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.width(76.dp),
@@ -217,7 +217,7 @@ fun RewardEditor(game: Game, onChange: () -> Unit = {}) {
             }
         }
         Text(
-            "단어 하나를 외울 때마다(그날 처음 맞힐 때) 물고기 1마리를 낚아요. 하루에 보통 20~40마리 모여요.",
+            "문제 하나를 외울 때마다(그날 처음 맞힐 때) 열매 1개를 수확해요. 하루에 보통 20~40개 모여요.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.outline,
         )
@@ -278,7 +278,7 @@ fun TelegramEditor(settings: StudySettings) {
         TextButton(onClick = {
             scope.launch {
                 status = "보내는 중…"
-                val error = Telegram.send(token, chatId, "✅ 낚아보카와 연결됐어요! 매일 저녁 여기로 학습 리포트를 보내드릴게요.")
+                val error = Telegram.send(token, chatId, "✅ 수확중와 연결됐어요! 매일 저녁 여기로 학습 리포트를 보내드릴게요.")
                 status = error ?: "테스트 메시지를 보냈어요. 텔레그램을 확인하세요"
             }
         }, enabled = token.isNotBlank() && chatId.isNotBlank()) { Text("📨 테스트 보내기") }
@@ -303,14 +303,14 @@ fun ParentAlerts(settings: StudySettings) {
     var backup by remember { mutableStateOf(settings.telegramBackup) }
     val context = androidx.compose.ui.platform.LocalContext.current
     Column {
-        Labeled("🌙 저녁 리포트 보내는 시간", "하루 한 통: 세 줄 요약, 약한 부분, 낚시·원정·시험 결과를 짧게 모아서 보내요") {
+        Labeled("🌙 저녁 리포트 보내는 시간", "하루 한 통: 세 줄 요약, 약한 부분, 수확·원정·시험 결과를 짧게 모아서 보내요") {
             NumberChoice(reportHour, Opt.reportHour, "시", 23, min = 0) {
                 reportHour = it; settings.reportHour = it; com.suhwak.app.data.EveningReport.schedule(context)
             }
         }
         Text("바로 오는 짧은 알림", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 12.dp))
-        SwitchRow("목표를 다 채우면 알림", "켜 둔 목표(단어·시간)를 모두 채우는 순간 한 줄", goal) { goal = it; settings.alertGoal = it }
-        SwitchRow("쿠폰을 받으면 알림", "아이가 물고기로 보상 쿠폰을 받는 순간", coupon) { coupon = it; settings.alertCoupon = it }
+        SwitchRow("목표를 다 채우면 알림", "켜 둔 목표(문제·시간)를 모두 채우는 순간 한 줄", goal) { goal = it; settings.alertGoal = it }
+        SwitchRow("쿠폰을 받으면 알림", "아이가 열매로 보상 쿠폰을 받는 순간", coupon) { coupon = it; settings.alertCoupon = it }
         SwitchRow("연속 학습이 끊기면 알림", "이어지던 공부를 하루 쉬면 다음 날", streak) { streak = it; settings.alertStreak = it }
         if (com.suhwak.app.sync.FamilySync.code(context) == null) {
             SwitchRow("매주 자동 백업", "기기 동기화를 안 쓸 때만, 일주일에 한 번 백업 파일을 보내요", backup) { backup = it; settings.telegramBackup = it }
@@ -371,14 +371,14 @@ fun ResetEditor() {
 
     Column {
         Text(
-            "단어장과 단어는 그대로 두고, 외운 기록만 지워서 처음부터 다시 해요. 실행 직전 상태를 저장해 두니 실수해도 되돌릴 수 있어요.",
+            "문제집과 문제는 그대로 두고, 외운 기록만 지워서 처음부터 다시 해요. 실행 직전 상태를 저장해 두니 실수해도 되돌릴 수 있어요.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.outline,
         )
-        Text("어떤 단어를?", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 12.dp))
+        Text("어떤 문제를?", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(all, { all = true }, label = { Text("전체 단어") })
-            FilterChip(!all, { all = false }, label = { Text("단어장 고르기") })
+            FilterChip(all, { all = true }, label = { Text("전체 문제") })
+            FilterChip(!all, { all = false }, label = { Text("문제집 고르기") })
         }
         if (!all) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -391,15 +391,15 @@ fun ResetEditor() {
             }
         }
         Text("무엇을 지울까요?", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 12.dp))
-        SwitchRow("📘 단어 진도", "외운 기록, 복습 일정, 오답노트", words) { words = it }
+        SwitchRow("📘 문제 진도", "외운 기록, 복습 일정, 오답노트", words) { words = it }
         SwitchRow(
-            "🐟 물고기 · 도감 · 쿠폰",
-            if (all) "모은 물고기, 낚은 물고기 도감, 원정 기록, 받은 쿠폰" else "전체 단어를 고를 때만 지울 수 있어요",
+            "🍎 열매 · 도감 · 쿠폰",
+            if (all) "모은 열매, 수확한 열매 도감, 원정 기록, 받은 쿠폰" else "전체 문제를 고를 때만 지울 수 있어요",
             fish && all,
         ) { if (all) fish = it }
         SwitchRow(
             "🏆 등급 · 공부 시간 · 통계",
-            if (all) "레벨, 출석 도장, 공부한 시간, 정답률 기록 (끄면 레벨은 그대로 유지돼요)" else "전체 단어를 고를 때만 지울 수 있어요",
+            if (all) "레벨, 출석 도장, 공부한 시간, 정답률 기록 (끄면 레벨은 그대로 유지돼요)" else "전체 문제를 고를 때만 지울 수 있어요",
             records && all,
         ) { if (all) records = it }
         SecondaryButton(if (working) "초기화하는 중…" else "🧹 초기화하기", { confirm = true }, Modifier.fillMaxWidth().padding(top = 8.dp), enabled = canRun && !working)
@@ -413,8 +413,8 @@ fun ResetEditor() {
     if (confirm) {
         var typed by remember { mutableStateOf("") }
         val what = listOfNotNull(
-            if (words) (if (all) "전체 단어" else "고른 단어장 ${picked.size}개") + "의 외운 기록" else null,
-            if (fish && all) "물고기 · 도감 · 쿠폰" else null,
+            if (words) (if (all) "전체 문제" else "고른 문제집 ${picked.size}개") + "의 외운 기록" else null,
+            if (fish && all) "열매 · 도감 · 쿠폰" else null,
             if (records && all) "등급 · 공부 시간 · 통계" else null,
         )
         androidx.compose.material3.AlertDialog(
@@ -499,7 +499,7 @@ fun GiantMixEditor(settings: StudySettings) {
         mix = next; settings.giantMix = next
     }
     Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-        Text("⛵ 대왕물고기 문제 비율", style = MaterialTheme.typography.bodyLarge)
+        Text("⛵ 대왕열매 문제 비율", style = MaterialTheme.typography.bodyLarge)
         Text(
             names.indices.joinToString(" · ") { "${short[it]} ${mix[it]}%" },
             style = MaterialTheme.typography.bodySmall,

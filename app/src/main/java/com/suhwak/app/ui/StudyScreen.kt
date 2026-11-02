@@ -405,15 +405,15 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
         if (fish > 0) {
             game.addStars(fish)
             viewModelScope.launch {
-                game.recount(dao, stats)?.let { celebrate("레벨 업! Lv.$it ${Levels.title(it)} 🎉 선물 물고기 ${Levels.gift(it)}마리") }
+                game.recount(dao, stats)?.let { celebrate("레벨 업! Lv.$it ${Levels.title(it)} 🎉 선물 열매 ${Levels.gift(it)}개") }
             }
         }
         when {
             combo >= 3 -> {
-                celebrate("${combo}콤보! 🔥" + if (caught) " 🐟+1" else "", sound = false)
+                celebrate("${combo}콤보! 🔥" + if (caught) " 🍎+1" else "", sound = false)
                 if (settings.soundEffects) sfx.combo(settings.comboSound, combo)
             }
-            caught -> celebrate("🐟 한 마리 낚았어요!", sound = false)
+            caught -> celebrate("🍎 하나 수확했어요!", sound = false)
         }
         // Without a daily goal, the first right answer of the day earns the stamp.
         if (goalMs <= 0) stamp()
@@ -421,7 +421,7 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
 
     private fun stamp() {
         if (game.hasStamp()) return
-        if (game.stampToday()) celebrate("🏅 7일 연속 출석 배지! 선물 물고기 20마리 🐟") else celebrate("오늘 출석 도장 쾅! 📮")
+        if (game.stampToday()) celebrate("🏅 7일 연속 출석 배지! 선물 열매 20개 🍎") else celebrate("오늘 출석 도장 쾅! 📮")
     }
 
     private fun checkGoal() {
@@ -466,6 +466,17 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
         canUndo = false
         sessionSize = runWords.size
         doneCount = 0
+        if (steps[stepIndex] == listOf(StudyMode.LIST) && runWords.isNotEmpty() && runWords.all { it.isSeed }) {
+            // 수확중: 씨앗(수학 문제)을 목록으로 먼저 보면 정답이 다 보이니, 목록 단계는 건너뛰고 바로 푼다.
+            if (stepIndex < steps.lastIndex) {
+                stepIndex++
+                beginStep()
+            } else {
+                refill()
+                prepare()
+            }
+            return
+        }
         if (steps[stepIndex] == listOf(StudyMode.LIST)) {
             // 단어장 보기: the whole list on one screen, no questions.
             mode = StudyMode.LIST
@@ -497,13 +508,13 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
     private fun sendTestResult() {
         val missed = everMissed.map { "${it.text}(${it.meaning.substringBefore(" /")})" }
         viewModelScope.launch {
-            val deckName = if (deckId > 0) dao.getDeck(deckId)?.name ?: "" else "전체 단어"
+            val deckName = if (deckId > 0) dao.getDeck(deckId)?.name ?: "" else "전체 문제"
             // Collected for the evening report.
             EveningReport.add(
                 getApplication(),
                 buildString {
                     append("📝 시험 · $deckName: ${testScore}점 (${sessionSize}문제 중 ${firstTryKnown}개)")
-                    if (missed.isNotEmpty()) append("\n   틀린 단어: ${missed.joinToString(", ")}")
+                    if (missed.isNotEmpty()) append("\n   틀린 문제: ${missed.joinToString(", ")}")
                 },
             )
         }
@@ -542,11 +553,11 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
             if (audio.getStreamVolume(android.media.AudioManager.STREAM_MUSIC) == 0) {
                 m = StudyMode.SPELLING
                 fullSpelling = true
-                modeNote = "🔇 소리가 꺼져 있어서 뜻을 보고 스펠링 전체 쓰기로 바꿨어요"
+                modeNote = "🔇 소리가 꺼져 있어서 정답을 보고 스펠링 전체 쓰기로 바꿨어요"
             } else if (dictationOff) {
                 m = StudyMode.SPELLING
                 fullSpelling = true
-                modeNote = "🔇 들을 수 없어서 뜻을 보고 스펠링 전체 쓰기로 나와요"
+                modeNote = "🔇 들을 수 없어서 정답을 보고 스펠링 전체 쓰기로 나와요"
             }
         }
         val others = pool.filter { it.id != word.id && !it.text.equals(word.text, true) }.distinctBy { it.text.lowercase() }
@@ -599,9 +610,9 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
         val word = current ?: return
         if (settings.dictationPass == DictationPass.SESSION) {
             dictationOff = true
-            modeNote = "🔇 들을 수 없어서 뜻을 보고 스펠링 전체 쓰기로 바꿨어요 (이번 학습 내내)"
+            modeNote = "🔇 들을 수 없어서 정답을 보고 스펠링 전체 쓰기로 바꿨어요 (이번 학습 내내)"
         } else {
-            modeNote = "🔇 들을 수 없어서 뜻을 보고 스펠링 전체 쓰기로 바꿨어요"
+            modeNote = "🔇 들을 수 없어서 정답을 보고 스펠링 전체 쓰기로 바꿨어요"
         }
         mode = StudyMode.SPELLING
         pattern = allBlanks(word)
@@ -666,7 +677,7 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
         val guessed = (mode == StudyMode.CHOICE && answerMs in 1 until settings.guessMs) ||
             // 수확중 찍기 방지: 객관식 씨앗을 3초 안에 고르면 문제를 안 읽은 것으로 본다
             (mode == StudyMode.SOLVE && word.qtype == "mc" && answerMs in 1 until 3000)
-        if (guessed && answer != Answer.UNKNOWN) celebrate("너무 빨라요! 뜻을 읽고 골라요 🙂", sound = false)
+        if (guessed && answer != Answer.UNKNOWN) celebrate("너무 빨라요! 정답을 읽고 골라요 🙂", sound = false)
         if (mode != StudyMode.CARD) {
             answerLog.add(
                 AnswerEntry(
@@ -695,7 +706,7 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
                 learnedToday = stats.learnedCount
                 if (goalWords > 0 && learnedToday >= goalWords && !stats.wordGoalNotified) {
                     stats.wordGoalNotified = true
-                    celebrate("오늘 목표 ${goalWords}단어 달성! 🎉")
+                    celebrate("오늘 목표 ${goalWords}문제 달성! 🎉")
                     stamp()
                 }
                 checkAllGoals()
@@ -1262,7 +1273,7 @@ private fun SwipeCard(
                         else -> 30.sp
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        PosMeaning(word.pos, word.meaning.ifBlank { "(뜻 없음)" }, fontSize = meaningSize * textScale, badgeSize = 18.sp * textScale)
+                        PosMeaning(word.pos, word.meaning.ifBlank { "(정답 없음)" }, fontSize = meaningSize * textScale, badgeSize = 18.sp * textScale)
                         // The example names the word, so it goes on whichever side is seen second.
                         if (word.example.isNotBlank() && !backFirst) {
                             Spacer(Modifier.height(16.dp))
@@ -1323,8 +1334,8 @@ private fun StudyTimer(vm: StudyViewModel) {
                     )
                     if (vm.goalWords > 0) {
                         Text(
-                            "🧠 ${vm.learnedToday}/${vm.goalWords}\n오늘 외운 단어 / 하루 목표예요. " +
-                                "객관식·빈칸·듣고 쓰기에서 맞힌 단어만 세요. 뜻 카드 넘기기는 안 세요.",
+                            "🧠 ${vm.learnedToday}/${vm.goalWords}\n오늘 외운 문제 / 하루 목표예요. " +
+                                "객관식·빈칸·듣고 쓰기에서 맞힌 문제만 세요. 정답 카드 넘기기는 안 세요.",
                         )
                     }
                     Text("제목의 ${vm.doneCount}/${vm.sessionSize}\n이번 학습에서 끝낸 카드 / 전체 카드예요.")
@@ -1350,8 +1361,8 @@ private fun Summary(vm: StudyViewModel, onBack: () -> Unit) {
             Text(
                 when {
                     vm.testScore >= 90 -> "완벽에 가까워요! 🏆"
-                    vm.testScore >= 70 -> "잘했어요! 틀린 단어만 다시 보면 돼요 👍"
-                    else -> "틀린 단어는 오답노트에서 다시 연습해요 💪"
+                    vm.testScore >= 70 -> "잘했어요! 틀린 문제만 다시 보면 돼요 👍"
+                    else -> "틀린 문제는 오답노트에서 다시 연습해요 💪"
                 },
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.primary,
@@ -1368,7 +1379,7 @@ private fun Summary(vm: StudyViewModel, onBack: () -> Unit) {
         )
         if (vm.goalWords > 0) {
             Text(
-                "오늘 외운 단어 ${vm.learnedToday}/${vm.goalWords}" +
+                "오늘 외운 문제 ${vm.learnedToday}/${vm.goalWords}" +
                     if (vm.learnedToday >= vm.goalWords) " · 목표 달성 🎉" else " · ${vm.goalWords - vm.learnedToday}개 남았어요",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.primary,
@@ -1382,14 +1393,14 @@ private fun Summary(vm: StudyViewModel, onBack: () -> Unit) {
         if (vm.sessionStars > 0) {
             Spacer(Modifier.height(8.dp))
             Text(
-                "🐟 단어 물고기 ${vm.sessionStars}마리 낚았어요 · 최고 ${vm.bestCombo}콤보",
+                "🍎 문제 열매 ${vm.sessionStars}개 수확했어요 · 최고 ${vm.bestCombo}콤보",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.primary,
             )
         }
         Spacer(Modifier.height(16.dp))
         if (vm.everMissed.isNotEmpty()) {
-            Text("틀렸던 단어", style = MaterialTheme.typography.titleMedium)
+            Text("틀렸던 문제", style = MaterialTheme.typography.titleMedium)
             LazyColumn(Modifier.weight(1f)) {
                 items(vm.everMissed, key = { it.id }) { w ->
                     ListItem(
@@ -1409,7 +1420,7 @@ private fun Summary(vm: StudyViewModel, onBack: () -> Unit) {
             Spacer(Modifier.weight(1f))
         }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (vm.everMissed.isNotEmpty()) PrimaryButton("틀린 단어만 다시 학습", { vm.restart(onlyMissed = true) })
+            if (vm.everMissed.isNotEmpty()) PrimaryButton("틀린 문제만 다시 학습", { vm.restart(onlyMissed = true) })
             SecondaryButton("처음부터 다시", { vm.restart(onlyMissed = false) })
             SecondaryButton("끝내기", onBack)
         }
@@ -1431,7 +1442,7 @@ private fun WordListStep(
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.padding(start = 24.dp, end = 8.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                if (cover == ListCover.NONE) "먼저 단어와 뜻을 훑어보세요. 🔊를 누르면 발음이 나와요."
+                if (cover == ListCover.NONE) "먼저 문제와 정답을 훑어보세요. 🔊를 누르면 발음이 나와요."
                 else "가린 칸을 떠올려 보고, 줄을 누르면 보여요.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.outline,

@@ -210,7 +210,7 @@ fun DeckScreen(
                 actions = {
                     if (words.isNotEmpty()) CoverToggle(cover) { cover = it; vm.settings.listCover = it.ordinal }
                     Box {
-                        IconButton(onClick = { menuOpen = true }) { Icon(Icons.Default.MoreVert, "단어장 메뉴") }
+                        IconButton(onClick = { menuOpen = true }) { Icon(Icons.Default.MoreVert, "문제집 메뉴") }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                             DropdownMenuItem(
                                 text = { Text("이름 바꾸기") },
@@ -218,7 +218,7 @@ fun DeckScreen(
                                 onClick = { menuOpen = false; guard { showRename = true } },
                             )
                             DropdownMenuItem(
-                                text = { Text("단어장 점검 (오타·뜻)") },
+                                text = { Text("문제집 점검 (오타·정답)") },
                                 leadingIcon = { Icon(Icons.Default.Spellcheck, null) },
                                 enabled = words.isNotEmpty(),
                                 onClick = { menuOpen = false; guard { showCheck = true } },
@@ -234,11 +234,11 @@ fun DeckScreen(
                                         putExtra(Intent.EXTRA_SUBJECT, deck?.name)
                                         putExtra(Intent.EXTRA_TEXT, vm.exportText())
                                     }
-                                    context.startActivity(Intent.createChooser(send, "단어장 내보내기"))
+                                    context.startActivity(Intent.createChooser(send, "문제집 내보내기"))
                                 },
                             )
                             DropdownMenuItem(
-                                text = { Text("단어장 삭제", color = MaterialTheme.colorScheme.error) },
+                                text = { Text("문제집 삭제", color = MaterialTheme.colorScheme.error) },
                                 leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
                                 onClick = { menuOpen = false; showDelete = true },
                             )
@@ -254,7 +254,7 @@ fun DeckScreen(
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 icon = { Icon(Icons.Default.Add, null) },
-                text = { Text("단어 추가") },
+                text = { Text("문제 추가") },
             )
         },
     ) { padding ->
@@ -272,7 +272,7 @@ fun DeckScreen(
             item {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
                     Text(
-                        "단어 ${words.size}개 · 외웠어요 ${active.count { it.mastered }}개 · 모르는 것 ${unknownCount}개",
+                        "문제 ${words.size}개 · 외웠어요 ${active.count { it.mastered }}개 · 모르는 것 ${unknownCount}개",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.outline,
                     )
@@ -308,7 +308,7 @@ fun DeckScreen(
             if (words.isEmpty()) {
                 item {
                     Text(
-                        "카드가 없어요. 아래 '단어 추가'로 사진을 찍거나 직접 입력해 보세요.",
+                        "카드가 없어요. 아래 '문제 추가'로 사진을 찍거나 직접 입력해 보세요.",
                         modifier = Modifier.padding(24.dp),
                         style = MaterialTheme.typography.bodyMedium,
                     )
@@ -336,8 +336,8 @@ fun DeckScreen(
     if (showAdd) {
         ModalBottomSheet(onDismissRequest = { showAdd = false }, containerColor = MaterialTheme.colorScheme.surface) {
             Column(Modifier.navigationBarsPadding().padding(bottom = 16.dp)) {
-                Text("단어 추가", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
-                SheetItem(Icons.Default.CameraAlt, "사진 찍기", "찍은 사진에서 단어를 찾아 이 단어장에 넣어요") {
+                Text("문제 추가", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+                SheetItem(Icons.Default.CameraAlt, "사진 찍기", "찍은 사진에서 문제를 찾아 이 문제집에 넣어요") {
                     showAdd = false
                     val uri = newPhotoUri(context)
                     pendingUri = uri.toString()
@@ -347,7 +347,7 @@ fun DeckScreen(
                     showAdd = false
                     pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                 }
-                SheetItem(Icons.Default.Keyboard, "직접 입력", "단어와 뜻을 손으로 적어요 (뜻을 비우면 자동 번역)") {
+                SheetItem(Icons.Default.Keyboard, "직접 입력", "문제와 정답을 손으로 적어요 (정답을 비우면 자동 번역)") {
                     showAdd = false
                     showManual = true
                 }
@@ -392,7 +392,7 @@ fun DeckScreen(
     if (showRename) {
         TextInputDialog(
             title = "이름 바꾸기",
-            label = "단어장 이름",
+            label = "문제집 이름",
             initial = deck?.name ?: "",
             confirmText = "저장",
             onDismiss = { showRename = false },
@@ -404,7 +404,7 @@ fun DeckScreen(
     }
     pending?.let { action ->
         PinConfirmDialog(
-            text = "단어를 추가·삭제·수정하려면 비밀번호를 입력하세요.",
+            text = "문제를 추가·삭제·수정하려면 비밀번호를 입력하세요.",
             check = vm.settings::checkPin,
             onDismiss = { pending = null },
             onConfirm = { unlocked = true; pending = null; action() },
@@ -414,14 +414,14 @@ fun DeckScreen(
     if (showDelete) {
         if (vm.settings.hasPin) {
             PinConfirmDialog(
-                text = "'${deck?.name}' 단어장과 단어 ${words.size}개를 삭제하려면 비밀번호를 입력하세요.",
+                text = "'${deck?.name}' 문제집과 문제 ${words.size}개를 삭제하려면 비밀번호를 입력하세요.",
                 check = vm.settings::checkPin,
                 onDismiss = { showDelete = false },
                 onConfirm = { showDelete = false; vm.deleteDeck(onBack) },
             )
         } else {
             ConfirmDialog(
-                text = "'${deck?.name}' 단어장과 단어 ${words.size}개를 삭제할까요?",
+                text = "'${deck?.name}' 문제집과 문제 ${words.size}개를 삭제할까요?",
                 onDismiss = { showDelete = false },
                 onConfirm = { showDelete = false; vm.deleteDeck(onBack) },
             )
@@ -455,7 +455,7 @@ private fun WordRow(
         supportingContent = {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.alpha(dim)) {
                 PosBadge(word.pos, Modifier.padding(end = 6.dp))
-                if (cover == ListCover.MEANING) CoverBar(width = 120) else Text(word.meaning.ifBlank { "(뜻 없음)" })
+                if (cover == ListCover.MEANING) CoverBar(width = 120) else Text(word.meaning.ifBlank { "(정답 없음)" })
             }
         },
         leadingContent = {

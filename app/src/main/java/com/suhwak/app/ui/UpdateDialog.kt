@@ -48,10 +48,10 @@ fun UpdateDialog(u: Updater.Update, onDismiss: () -> Unit) {
 
     AlertDialog(
         onDismissRequest = { if (progress == null) onDismiss() },
-        title = { Text("🎣 새 버전이 나왔어요") },
+        title = { Text("🧺 새 버전이 나왔어요") },
         text = {
             Column {
-                Text("build-${u.build}로 업데이트할 수 있어요. 단어와 기록은 그대로 남아요.")
+                Text("build-${u.build}로 업데이트할 수 있어요. 문제와 기록은 그대로 남아요.")
                 if (u.notes.isNotBlank()) {
                     Spacer(Modifier.height(12.dp))
                     Text("이번에 바뀐 점", style = MaterialTheme.typography.titleSmall)

@@ -90,7 +90,7 @@ fun SetupWizard(settings: StudySettings, hasPin: Boolean, onSetPin: () -> Unit, 
         },
         WizardStep(
             "① 학습 순서",
-            "단어 하나를 어떤 방법으로, 어떤 순서로 공부할지 정해요.",
+            "문제 하나를 어떤 방법으로, 어떤 순서로 공부할지 정해요.",
             "묶음 하나를 고르세요. 세부 순서는 설정 > 📚 학습 방법에서 ▲▼로 바꿀 수 있어요.",
             "처음 외울 때: 훑어보고 → 카드 → 객관식 → 빈칸 → 듣고 쓰기로 점점 어려워져 오래 기억에 남아요.",
         ) {
@@ -112,7 +112,7 @@ fun SetupWizard(settings: StudySettings, hasPin: Boolean, onSetPin: () -> Unit, 
                     )
                 }
             }
-            Labeled("빈칸 난이도", "자동은 잘 외운 단어일수록 빈칸이 늘어나요") {
+            Labeled("빈칸 난이도", "자동은 잘 외운 문제일수록 빈칸이 늘어나요") {
                 Choice(blank, BlankLevel.entries.map { it to it.label }, BlankLevel.AUTO) { blank = it; settings.blankLevel = it }
             }
             if (StudyMode.DICTATION in modes) {
@@ -123,13 +123,13 @@ fun SetupWizard(settings: StudySettings, hasPin: Boolean, onSetPin: () -> Unit, 
         },
         WizardStep(
             "② 하루 목표",
-            "하루에 몇 단어, 몇 분 공부할지 정해요.",
-            "단어는 객관식·빈칸·듣고 쓰기에서 맞힌 것만 세요. 시간을 채우면 오늘 목표 달성이고, 텔레그램을 연결했다면 결과가 부모님께 가요.",
+            "하루에 몇 문제, 몇 분 공부할지 정해요.",
+            "문제는 객관식·빈칸·듣고 쓰기에서 맞힌 것만 세요. 시간을 채우면 오늘 목표 달성이고, 텔레그램을 연결했다면 결과가 부모님께 가요.",
             "20개 · 20분: 매일 꾸준히 하기 좋은 양이에요.",
         ) {
             var words by remember { mutableIntStateOf(settings.dailyWords) }
             var minutes by remember { mutableIntStateOf(settings.dailyGoalMinutes) }
-            Labeled("하루 외울 단어") {
+            Labeled("하루 외울 문제") {
                 NumberChoice(words, Opt.dailyWords, "개", 300, min = 0, recommended = 20) { words = it; settings.dailyWords = it }
             }
             Labeled("하루 최소 학습 시간") {
@@ -151,7 +151,7 @@ fun SetupWizard(settings: StudySettings, hasPin: Boolean, onSetPin: () -> Unit, 
         WizardStep(
             "④ 학습량",
             "학습 한 번에 카드 몇 장, 시험 한 번에 몇 문제를 낼지 정해요.",
-            "'전부'는 단어장의 단어를 모두 공부해요. 시험 점수는 텔레그램으로 부모님께도 가요.",
+            "'전부'는 문제집의 문제를 모두 공부해요. 시험 점수는 텔레그램으로 부모님께도 가요.",
             "카드 20장 · 시험 20문제",
         ) {
             var size by remember { mutableIntStateOf(settings.sessionSize) }
@@ -176,7 +176,7 @@ fun SetupWizard(settings: StudySettings, hasPin: Boolean, onSetPin: () -> Unit, 
             var effects by remember { mutableStateOf(settings.soundEffects) }
             var combo by remember { mutableIntStateOf(settings.comboSound) }
             SwitchRow("카드 섞기", "끄면 알파벳 순서", shuffle) { shuffle = it; settings.shuffle = it }
-            SwitchRow("뒷면 먼저", "뜻을 보고 영어 단어 떠올리기", backFirst) { backFirst = it; settings.backFirst = it }
+            SwitchRow("뒷면 먼저", "정답을 보고 수학 문제 떠올리기", backFirst) { backFirst = it; settings.backFirst = it }
             Labeled("글자 크기") {
                 Choice(scale, Opt.textScale, 1f) { scale = it; settings.textScale = it }
             }
@@ -206,17 +206,17 @@ fun SetupWizard(settings: StudySettings, hasPin: Boolean, onSetPin: () -> Unit, 
             SwitchRow("틀린 카드 반복", "모르는 카드는 알 때까지 다시 (끄면 한 번씩만)", repeat) { repeat = it; settings.repeatMissed = it }
         },
         WizardStep(
-            "⑦ 종합단어장",
-            "종합단어장을 공부할 때 최근 넣은 단어를 얼마나 낼지 정해요.",
-            "나머지는 기존 단어 중 복습할 때가 된 것과 자주 틀린 것부터 나와요.",
-            "최근 7일 안에 넣은 단어를 90%",
+            "⑦ 종합 문제집",
+            "종합 문제집을 공부할 때 최근 넣은 문제를 얼마나 낼지 정해요.",
+            "나머지는 기존 문제 중 복습할 때가 된 것과 자주 틀린 것부터 나와요.",
+            "최근 7일 안에 넣은 문제를 90%",
         ) {
             var share by remember { mutableIntStateOf(settings.recentShare) }
             var days by remember { mutableIntStateOf(settings.recentDays) }
-            Labeled("최근 추가 단어 비율", "10문제 중 새 단어 ${share / 10}문제 · 기존 단어 ${10 - share / 10}문제") {
+            Labeled("최근 추가 문제 비율", "10문제 중 새 문제 ${share / 10}문제 · 기존 문제 ${10 - share / 10}문제") {
                 NumberChoice(share, Opt.recentShare, "%", 100, recommended = 90) { share = it; settings.recentShare = it }
             }
-            Labeled("며칠 안에 넣은 단어를 '최근'으로 볼까요?") {
+            Labeled("며칠 안에 넣은 문제를 '최근'으로 볼까요?") {
                 NumberChoice(days, Opt.recentDays, "일", 60, recommended = 7) { days = it; settings.recentDays = it }
             }
         },
@@ -230,9 +230,9 @@ fun SetupWizard(settings: StudySettings, hasPin: Boolean, onSetPin: () -> Unit, 
             NumberChoice(idle, Opt.idle, "초", 600, min = 5, recommended = 20) { idle = it; settings.idleSeconds = it }
         },
         WizardStep(
-            "⑨ 단어 낚시 게임",
-            "오늘 목표를 채우면 열리는 낚시 게임의 난이도예요.",
-            "맞히면 물고기를 끌어오고, 틀리거나 가만히 있으면 멀어져요. 세부 거리는 설정 > 🎣 낚시에서 바꿀 수 있어요.",
+            "⑨ 문제 수확 게임",
+            "오늘 목표를 채우면 열리는 수확 게임의 난이도예요.",
+            "맞히면 열매를 끌어오고, 틀리거나 가만히 있으면 멀어져요. 세부 거리는 설정 > 🧺 수확에서 바꿀 수 있어요.",
             "보통 · 횟수 무제한",
         ) {
             var level by remember { mutableStateOf(settings.fishLevel()) }
@@ -253,9 +253,9 @@ fun SetupWizard(settings: StudySettings, hasPin: Boolean, onSetPin: () -> Unit, 
         },
         WizardStep(
             "⑩ 보상 쿠폰",
-            "아이가 단어를 외워 낚은 물고기로 받을 수 있는 보상을 정해요.",
-            "보상 이름과 필요한 물고기 수를 쓰고 '보상 추가'를 누르세요. 쿠폰은 복습·통계 탭에서 받아요.",
-            "작은 보상(50마리)과 큰 보상(300마리)을 섞어 두면 꾸준히 해요.",
+            "아이가 문제를 외워 수확한 열매로 받을 수 있는 보상을 정해요.",
+            "보상 이름과 필요한 열매 수를 쓰고 '보상 추가'를 누르세요. 쿠폰은 복습·통계 탭에서 받아요.",
+            "작은 보상(50개)과 큰 보상(300개)을 섞어 두면 꾸준히 해요.",
         ) {
             RewardEditor(game)
         },
@@ -270,9 +270,9 @@ fun SetupWizard(settings: StudySettings, hasPin: Boolean, onSetPin: () -> Unit, 
         },
         WizardStep(
             "⑫ 부모님 비밀번호",
-            "아이가 설정과 단어를 마음대로 바꾸지 못하게 4자리 비밀번호를 걸어요.",
-            "비밀번호를 걸면 설정을 열거나 단어를 고칠 때 비밀번호를 물어봐요. 비밀번호를 건 뒤 설정 > 비밀번호와 보상에서 패턴·지문으로도 열 수 있게 할 수 있어요.",
-            "걸어 두기: 아이가 목표나 단어를 임의로 바꾸지 못해요.",
+            "아이가 설정과 문제를 마음대로 바꾸지 못하게 4자리 비밀번호를 걸어요.",
+            "비밀번호를 걸면 설정을 열거나 문제를 고칠 때 비밀번호를 물어봐요. 비밀번호를 건 뒤 설정 > 비밀번호와 보상에서 패턴·지문으로도 열 수 있게 할 수 있어요.",
+            "걸어 두기: 아이가 목표나 문제를 임의로 바꾸지 못해요.",
         ) {
             if (hasPin) {
                 Text("✅ 비밀번호가 걸려 있어요", color = MaterialTheme.colorScheme.primary)

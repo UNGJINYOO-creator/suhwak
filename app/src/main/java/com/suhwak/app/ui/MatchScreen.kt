@@ -185,7 +185,7 @@ fun MatchScreen(onBack: () -> Unit, vm: MatchViewModel = viewModel(factory = Mat
                         style = MaterialTheme.typography.titleMedium,
                     )
                     Text(
-                        if (vm.mistakes == 0) "실수 없이 끝내서 물고기 3마리! 🐟" else "물고기 1마리 낚았어요 · 실수 없이 하면 3마리",
+                        if (vm.mistakes == 0) "실수 없이 끝내서 열매 3개! 🍎" else "열매 1개 수확했어요 · 실수 없이 하면 3개",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.primary,
                     )
@@ -195,10 +195,10 @@ fun MatchScreen(onBack: () -> Unit, vm: MatchViewModel = viewModel(factory = Mat
                 Spacer(Modifier.height(8.dp))
                 SecondaryButton("끝내기", onBack)
             } else if (vm.tiles.size < 4) {
-                Text("짝 맞추기는 단어가 2개 이상 있어야 해요", style = MaterialTheme.typography.bodyLarge)
+                Text("짝 맞추기는 문제가 2개 이상 있어야 해요", style = MaterialTheme.typography.bodyLarge)
             } else {
                 Text(
-                    "영어 단어와 뜻을 차례로 눌러 짝을 맞춰요",
+                    "수학 문제와 정답을 차례로 눌러 짝을 맞춰요",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.outline,
                 )

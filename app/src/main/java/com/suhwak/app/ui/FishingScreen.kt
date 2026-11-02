@@ -152,7 +152,7 @@ class FishingViewModel(app: Application) : AndroidViewModel(app) {
     /** Until the catch only the sea is known; a giant is known from the start. */
     var fish by mutableStateOf(unknownFish())
         private set
-    private fun unknownFish() = Fish(sea, 0, "🐟", "${sea.title} 물고기", 0.0, 0.0)
+    private fun unknownFish() = Fish(sea, 0, "🍎", "${sea.title} 열매", 0.0, 0.0)
     /** Set when this catch filled the sea's book for the first time. */
     var seaCompleted by mutableStateOf(false)
         private set
@@ -237,11 +237,11 @@ class FishingViewModel(app: Application) : AndroidViewModel(app) {
         val goalMinutes = settings.dailyGoalMinutes
         val goalWords = settings.dailyWords
         lockReason = when {
-            pool.size < 4 -> "단어가 4개 이상 있어야 낚시를 할 수 있어요"
+            pool.size < 4 -> "문제가 4개 이상 있어야 수확을 할 수 있어요"
             goalMinutes > 0 && stats.studyMs < goalMinutes * 60_000L ->
                 "오늘 학습 시간 ${goalMinutes}분을 채우면 열려요 (지금 ${stats.studyMs / 60_000}분)"
             goalMinutes <= 0 && goalWords > 0 && stats.learnedCount < goalWords ->
-                "오늘 목표 ${goalWords}단어를 채우면 열려요 (지금 ${stats.learnedCount}개)"
+                "오늘 목표 ${goalWords}문제를 채우면 열려요 (지금 ${stats.learnedCount}개)"
             triesLeft <= 0 -> "오늘 도전 기회를 다 썼어요. 내일 다시 도전해요!"
             else -> null
         }
@@ -321,7 +321,7 @@ class FishingViewModel(app: Application) : AndroidViewModel(app) {
             if (kind == 2 || (kind == 3 && (muted || listenOff))) {
                 mode = StudyMode.SPELLING
                 pattern = w.text.map { if (it.isLetter()) '_' else it }.joinToString("")
-                modeNote = if (kind == 2) "✍️ 뜻을 보고 스펠링 전체를 쓰세요" else "🔇 뜻을 보고 스펠링 전체를 쓰세요"
+                modeNote = if (kind == 2) "✍️ 정답을 보고 스펠링 전체를 쓰세요" else "🔇 정답을 보고 스펠링 전체를 쓰세요"
                 return
             }
         } else {
@@ -334,7 +334,7 @@ class FishingViewModel(app: Application) : AndroidViewModel(app) {
         if (mode == StudyMode.DICTATION && listenOff) {
             mode = StudyMode.SPELLING
             pattern = w.text.map { if (it.isLetter()) '_' else it }.joinToString("")
-            modeNote = "🔇 뜻을 보고 스펠링 전체를 쓰세요"
+            modeNote = "🔇 정답을 보고 스펠링 전체를 쓰세요"
             return
         }
         if (mode == StudyMode.CHOICE) {
@@ -364,7 +364,7 @@ class FishingViewModel(app: Application) : AndroidViewModel(app) {
         if (settings.dictationPass == com.suhwak.app.data.DictationPass.SESSION) listenOff = true
         mode = StudyMode.SPELLING
         pattern = w.text.map { if (it.isLetter()) '_' else it }.joinToString("")
-        modeNote = "🔇 들을 수 없어서 뜻을 보고 스펠링 전체 쓰기로 바꿨어요"
+        modeNote = "🔇 들을 수 없어서 정답을 보고 스펠링 전체 쓰기로 바꿨어요"
         questionAt = System.currentTimeMillis()
     }
 
@@ -401,7 +401,7 @@ class FishingViewModel(app: Application) : AndroidViewModel(app) {
                 val bonus = (if (mode == StudyMode.CHOICE) fishing.right else fishing.rightTyping) +
                     (if (combo % 3 == 0) fishing.comboBonus else 0.0)
                 seconds += bonus
-                popUp((if (combo % 3 == 0) "🔥 릴 감기! " else "🎣 ") + "${bonus.toInt()}m 끌어왔어요!")
+                popUp((if (combo % 3 == 0) "🔥 릴 감기! " else "🧺 ") + "${bonus.toInt()}m 끌어왔어요!")
                 if (settings.soundEffects) {
                     if (combo >= 3) sfx.combo(settings.comboSound, combo) else tone?.startTone(android.media.ToneGenerator.TONE_PROP_ACK, 120)
                 }
@@ -412,7 +412,7 @@ class FishingViewModel(app: Application) : AndroidViewModel(app) {
             seconds -= lost
             missed += w
             pullId++
-            popUp("😱 물고기가 도망치고 있어요! +${lost.toInt()}m")
+            popUp("😱 열매가 도망치고 있어요! +${lost.toInt()}m")
         }
         answerLog.add(AnswerEntry(System.currentTimeMillis(), w.id, w.text, w.pos, mode, correct, false, if (correct) "" else response, ms))
         if (!guessed) {
@@ -494,13 +494,13 @@ class FishingViewModel(app: Application) : AndroidViewModel(app) {
     /** Collected for the parents' evening report rather than sent right away. */
     private fun report(caught: Boolean) {
         val text = buildString {
-            append(if (giantMode) "⛵ 원정 최종전: " else "🎣 낚시: ")
+            append(if (giantMode) "⛵ 원정 최종전: " else "🧺 수확: ")
             if (caught) append("${fish.emoji} ${fish.name} ${Fishing.formatKg(kg)} 낚음" + if (newRecord) " 🏆 최고 기록" else "")
             else append("😢 놓침")
             append(" · 정답 $right/$total · ${durationMs / 60_000}분 ${durationMs / 1000 % 60}초")
             harpoon?.let { append(" · 🔱 ${it.fish.name}에게 작살 ${it.hit}개") }
             if (missed.isNotEmpty()) {
-                append("\n   틀린 단어: ")
+                append("\n   틀린 문제: ")
                 append(missed.distinctBy { it.id }.joinToString(", ") { "${it.text}(${it.meaning.substringBefore(" /")})" })
             }
         }
@@ -533,7 +533,7 @@ fun FishingScreen(onBack: () -> Unit, onMoreWords: () -> Unit = {}, giantOnly: B
     Scaffold(
         topBar = {
             AppTopBar(
-                title = { Text(if (giantOnly) "⛵ 대양 원정" else "🎣 오늘의 낚시") },
+                title = { Text(if (giantOnly) "⛵ 대양 원정" else "🧺 오늘의 수확") },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로") }
                 },
@@ -573,7 +573,7 @@ private fun HarpoonScene(h: Harpoon) {
         Spacer(Modifier.height(8.dp))
         ThickProgress(left.value / h.total.coerceAtLeast(1), Modifier.fillMaxWidth())
         Text(
-            "오늘 외운 단어 ${h.hit}개가 꽂혔어요 · 남은 칸 ${left.value.roundToInt()}",
+            "오늘 외운 문제 ${h.hit}개가 꽂혔어요 · 남은 칸 ${left.value.roundToInt()}",
             color = com.suhwak.app.ui.theme.Sea.Ink,
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.padding(top = 6.dp),
@@ -644,29 +644,29 @@ private fun FirstGuide(key: String, emoji: String, steps: List<String>) {
 }
 
 private val dailySteps = listOf(
-    "🌊 바다를 골라요. 바다마다 사는 물고기가 달라요",
-    "✅ 단어 문제를 맞힐수록 물고기가 가까이 와요. 틀리면 멀어져요",
-    "🎣 0m가 되면 낚아요! 그러면 오늘 외운 단어가 원정 중인 거대 물고기에게 작살로 날아가요",
+    "🌊 바다를 골라요. 바다마다 사는 열매가 달라요",
+    "✅ 문제 문제를 맞힐수록 열매가 가까이 와요. 틀리면 멀어져요",
+    "🧺 0m가 되면 수확해요! 그러면 오늘 외운 문제가 원정 중인 거대 열매에게 작살로 날아가요",
 )
 
 @Composable
 private fun Intro(vm: FishingViewModel, onBook: () -> Unit, onLog: () -> Unit) {
     LaunchedEffect(Unit) { vm.refreshLock() }
-    FirstGuide("daily", "🎣", dailySteps)
+    FirstGuide("daily", "🧺", dailySteps)
     val f = vm.fishing
     GameFrame(
-        emoji = "🎣",
-        title = "오늘의 낚시",
-        story = "오늘 목표를 채우면 낚싯대가 열려요. 오늘 외운 단어로 물고기를 낚아요!",
+        emoji = "🧺",
+        title = "오늘의 수확",
+        story = "오늘 목표를 채우면 수확 바구니가 열려요. 오늘 외운 문제로 열매를 수확해요!",
         steps = dailySteps,
         rules = listOf(
-            "🐟 물고기는 ${(f.goal - f.start).toInt()}m 앞에서 시작해요. 가만히 있으면 조금씩 도망가요",
+            "🍎 열매는 ${(f.goal - f.start).toInt()}m 앞에서 시작해요. 가만히 있으면 조금씩 도망가요",
             "✅ 맞히면 ${f.right.toInt()}m 끌어와요 (빈칸·듣고 쓰기는 ${f.rightTyping.toInt()}m)",
             "🔥 3개 연속 맞히면 '릴 감기!' ${f.comboBonus.toInt()}m 더",
             "❌ 틀리면 ${f.wrong.toInt()}m 멀어져요 (빈칸·듣고 쓰기는 ${f.wrongTyping.toInt()}m). 너무 빨리 찍으면 0m",
-            "🧵 ${f.goal.toInt()}m까지 멀어지면 줄이 끊어져요. 가까워질수록 물고기가 세게 버텨요",
-            "🎯 낚으면 선물 물고기 ${Fishing.CATCH_STARS}마리! (방금 배운 단어로 하면 ${Fishing.CATCH_STARS + Fishing.NEW_SEA_BONUS}마리)" + f.triesNote,
-            "✨ 많이 맞히고 빨리 낚을수록 희귀한 물고기가 잘 걸려요",
+            "🧵 ${f.goal.toInt()}m까지 멀어지면 줄이 끊어져요. 가까워질수록 열매가 세게 버텨요",
+            "🎯 낚으면 선물 열매 ${Fishing.CATCH_STARS}개! (방금 배운 문제로 하면 ${Fishing.CATCH_STARS + Fishing.NEW_SEA_BONUS}개)" + f.triesNote,
+            "✨ 많이 맞히고 빨리 수확할수록 희귀한 열매가 잘 걸려요",
         ),
     ) {
         // 오늘의 바다 소식
@@ -691,20 +691,20 @@ private fun Intro(vm: FishingViewModel, onBook: () -> Unit, onLog: () -> Unit) {
             )
         } else if (vm.newSeaCount > 0) {
             // After 새 단어 더 배우기: fish the words just learned, or the usual mix.
-            Text("어떤 단어로 낚을까요?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("어떤 문제로 수확할까요?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
-            PrimaryButton("🆕 방금 배운 ${vm.newSeaCount}단어로 (🐟${Fishing.CATCH_STARS + Fishing.NEW_SEA_BONUS})", { vm.start(true) })
+            PrimaryButton("🆕 방금 배운 ${vm.newSeaCount}문제로 (🍎${Fishing.CATCH_STARS + Fishing.NEW_SEA_BONUS})", { vm.start(true) })
             Spacer(Modifier.height(8.dp))
-            SecondaryButton("📚 오늘 + 예전 단어로 (🐟${Fishing.CATCH_STARS})", { vm.start(false) })
+            SecondaryButton("📚 오늘 + 예전 문제로 (🍎${Fishing.CATCH_STARS})", { vm.start(false) })
             if (f.triesNote.isNotEmpty()) {
                 Text(f.triesNote.trim(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
             }
         } else {
-            PrimaryButton("🎣 낚시 시작" + f.triesNote, { vm.start(false) })
+            PrimaryButton("🧺 수확 시작" + f.triesNote, { vm.start(false) })
         }
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SecondaryButton("📅 낚시 일지", onLog, Modifier.weight(1f))
+            SecondaryButton("📅 수확 일지", onLog, Modifier.weight(1f))
             SecondaryButton("📖 도감", onBook, Modifier.weight(1f))
         }
     }
@@ -761,7 +761,7 @@ private fun ColumnScope.Playing(vm: FishingViewModel, tts: TextToSpeech?) {
             )
             if (vm.mode == StudyMode.DICTATION && vm.answered == null) {
                 TextButton(onClick = vm::passDictation, modifier = Modifier.fillMaxWidth()) {
-                    Text("🔇 지금 들을 수 없어요 · 뜻 보고 쓰기")
+                    Text("🔇 지금 들을 수 없어요 · 정답 보고 쓰기")
                 }
             }
         }
@@ -806,7 +806,7 @@ private fun SeaBand(vm: FishingViewModel) {
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "🐟 물고기까지 ${"%.1f".format(distance)}m",
+                    "🍎 열매까지 ${"%.1f".format(distance)}m",
                     color = if (danger) com.suhwak.app.ui.theme.Sea.Danger else com.suhwak.app.ui.theme.Sea.Ink,
                     fontSize = sp(22, 18),
                     fontWeight = FontWeight.ExtraBold,
@@ -851,7 +851,7 @@ private fun SeaBand(vm: FishingViewModel) {
                     when {
                         danger -> "⚠️ 줄이 끊어지려 해요!"
                         distance < 20 -> "거의 다 왔어요! 조금만 더!"
-                        else -> "🎣 ${vm.fish.name} 낚는 중"
+                        else -> "🧺 ${vm.fish.name} 낚는 중"
                     },
                     color = if (danger) com.suhwak.app.ui.theme.Sea.Danger else com.suhwak.app.ui.theme.Sea.Ink,
                     style = MaterialTheme.typography.labelMedium,
@@ -897,12 +897,12 @@ private fun Result(vm: FishingViewModel, won: Boolean, onBack: () -> Unit, onBoo
         Spacer(Modifier.height(8.dp))
         val giantFish = vm.caughtGiant
         if (won && giantFish != null) {
-            Text("🏆 거대 물고기를 낚았어요!", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            Text("🏆 거대 열매를 수확했어요!", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
             Text("${giantFish.name} ${Fishing.formatKg(vm.kg)}!", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Text(giantFish.english, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.outline)
             Spacer(Modifier.height(8.dp))
             Text("💡 ${giantFish.fact}", style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
-            Text("선물 물고기 ${vm.catchStars}마리를 받았어요 🐟 · 도감에 올렸어요", style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
+            Text("선물 열매 ${vm.catchStars}개를 받았어요 🍎 · 도감에 올렸어요", style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
         } else if (won) {
             Text("${vm.fish.name} ${Fishing.formatKg(vm.kg)}!", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Text(
@@ -911,17 +911,17 @@ private fun Result(vm: FishingViewModel, won: Boolean, onBack: () -> Unit, onBoo
                 color = MaterialTheme.colorScheme.primary,
             )
             if (vm.newRecord) Text("🏆 최고 기록이에요!", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-            Text("선물 물고기 ${vm.catchStars}마리를 받았어요 🐟" + if (vm.newSea) " (새 단어 보너스!)" else "", style = MaterialTheme.typography.bodyLarge)
+            Text("선물 열매 ${vm.catchStars}개를 받았어요 🍎" + if (vm.newSea) " (새 문제 보너스!)" else "", style = MaterialTheme.typography.bodyLarge)
             if (vm.seaCompleted) {
                 Text(
-                    "🎉 ${vm.sea.title} 도감 완성! 선물 물고기 ${Fishing.SEA_GIFT}마리 더",
+                    "🎉 ${vm.sea.title} 도감 완성! 선물 열매 ${Fishing.SEA_GIFT}개 더",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary,
                     textAlign = TextAlign.Center,
                 )
             }
             Spacer(Modifier.height(8.dp))
-            Text("🎣 물고기를 낚았어요! 정말 잘했어요", style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+            Text("🧺 열매를 수확했어요! 정말 잘했어요", style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
             vm.harpoon?.let { HarpoonScene(it) }
         } else {
             Text("줄이 끊어져서 도망갔어요 😢", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -935,28 +935,28 @@ private fun Result(vm: FishingViewModel, won: Boolean, onBack: () -> Unit, onBoo
         val missed = vm.missed.distinctBy { it.id }
         if (missed.isNotEmpty()) {
             Spacer(Modifier.height(12.dp))
-            Text("틀린 단어", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            Text("틀린 문제", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
             missed.forEach { Text("${it.text}  ${it.meaning.substringBefore(" /")}", style = MaterialTheme.typography.bodyMedium) }
         }
         Spacer(Modifier.height(24.dp))
         if (vm.giantMode && !won) {
-            PrimaryButton("📖 틀린 단어 복습하고 다시 도전", vm::openReview)
+            PrimaryButton("📖 틀린 문제 복습하고 다시 도전", vm::openReview)
             Spacer(Modifier.height(12.dp))
         }
         // Riding the good mood after a catch: straight into the next new words.
-        PrimaryButton("📚 새 단어 ${vm.newWords}개 더 배우기", onMoreWords)
+        PrimaryButton("📚 새 문제 ${vm.newWords}개 더 배우기", onMoreWords)
         Text(
-            "아직 안 배운 단어가 나와요. 외운 단어가 늘수록 레벨이 올라가요!",
+            "아직 안 배운 문제가 나와요. 외운 문제가 늘수록 레벨이 올라가요!",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.outline,
             modifier = Modifier.padding(top = 4.dp),
         )
         Spacer(Modifier.height(12.dp))
         if (vm.triesLeft > 0 && !vm.giantMode) {
-            SecondaryButton(if (won) "🎣 한 번 더" else "🎣 다시 도전", { vm.start() })
+            SecondaryButton(if (won) "🧺 한 번 더" else "🧺 다시 도전", { vm.start() })
             Spacer(Modifier.height(8.dp))
         }
-        SecondaryButton("📖 물고기 도감", onBook)
+        SecondaryButton("📖 열매 도감", onBook)
         Spacer(Modifier.height(8.dp))
         SecondaryButton("홈으로", onBack)
     }
@@ -989,9 +989,9 @@ private fun SeaPicker(vm: FishingViewModel) {
 }
 
 private val giantSteps = listOf(
-    "📚 거대 물고기가 지키는 영단어 100개를 공부해요. 아래 칸을 누르면 단어 목록이 보여요",
-    "🎣 그날 오늘의 낚시에 성공하면, 외운 단어만큼 작살이 꽂혀서 칸이 채워져요",
-    "🏆 100칸을 다 채우면 최종전! 이기면 선물 물고기 ${Giant.CATCH_GIFT}마리, 배가 다음 바다로 항해해요",
+    "📚 거대 열매가 지키는 수학 문제 100개를 공부해요. 아래 칸을 누르면 문제 목록이 보여요",
+    "🧺 그날 오늘의 수확에 성공하면, 외운 문제만큼 작살이 꽂혀서 칸이 채워져요",
+    "🏆 100칸을 다 채우면 최종전! 이기면 선물 열매 ${Giant.CATCH_GIFT}개, 배가 다음 바다로 항해해요",
 )
 
 /** The 대양 원정 screen: the same frame as 오늘의 낚시, with the voyage and the giant's 10×10 word grid. */
@@ -1003,13 +1003,13 @@ private fun GiantIntro(vm: FishingViewModel, onBook: () -> Unit) {
     GameFrame(
         emoji = f?.emoji ?: "🏆",
         title = "대양 원정",
-        story = if (f != null) Giant.story(f) else "거대 물고기 ${Giant.species.size}마리를 모두 낚았어요! 대단해요 🎉",
+        story = if (f != null) Giant.story(f) else "거대 열매 ${Giant.species.size}개를 모두 수확했어요! 대단해요 🎉",
         steps = giantSteps,
         rules = listOf(
-            "⛵ 중학 영단어 1800개를 100개씩 나눠, 100개마다 거대 물고기가 한 마리씩 기다려요",
-            "⏳ 오늘 외운 단어는 노란 칸으로 보여요. 오늘의 낚시에 성공하는 순간 진짜 칸이 돼요",
-            "🏆 최종전은 그 100단어로만 문제가 나오고, 평소보다 먼 ${Giant.FINAL_START}m 앞에서 시작해요. 하루 도전 횟수는 안 써요",
-            "📖 최종전에서 놓치면 틀린 단어를 한 번 보고 다시 도전해요",
+            "⛵ 기본 씨앗 1800개를 100개씩 나눠, 100개마다 거대 열매가 하나씩 기다려요",
+            "⏳ 오늘 외운 문제는 노란 칸으로 보여요. 오늘의 수확에 성공하는 순간 진짜 칸이 돼요",
+            "🏆 최종전은 그 100문제로만 문제가 나오고, 평소보다 먼 ${Giant.FINAL_START}m 앞에서 시작해요. 하루 도전 횟수는 안 써요",
+            "📖 최종전에서 놓치면 틀린 문제를 한 번 보고 다시 도전해요",
         ),
     ) {
         if (g == null) return@GameFrame
@@ -1036,7 +1036,7 @@ private fun GiantPanel(g: GiantState, f: GiantFish, vm: FishingViewModel) {
         Modifier.fillMaxWidth().padding(bottom = 8.dp)
             .background(com.suhwak.app.ui.theme.Sea.Panel, RoundedCornerShape(16.dp)).padding(16.dp),
     ) {
-        Text("⛵ ${f.ocean.title} · ${g.index + 1}번째 거대 물고기 (${g.index + 1}/${Giant.species.size})", color = com.suhwak.app.ui.theme.Sea.Accent, style = MaterialTheme.typography.labelLarge)
+        Text("⛵ ${f.ocean.title} · ${g.index + 1}번째 거대 열매 (${g.index + 1}/${Giant.species.size})", color = com.suhwak.app.ui.theme.Sea.Accent, style = MaterialTheme.typography.labelLarge)
         Text("${f.emoji} ${f.name}", color = com.suhwak.app.ui.theme.Sea.Ink, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))
         Column(
@@ -1058,7 +1058,7 @@ private fun GiantPanel(g: GiantState, f: GiantFish, vm: FishingViewModel) {
             }
         }
         Text(
-            "🟦 작살 꽂힌 단어 ${g.hit} · 🟨 오늘 외운 단어 ${g.pending} · 남은 칸 ${g.hp}  (칸을 누르면 단어 목록)",
+            "🟦 작살 꽂힌 문제 ${g.hit} · 🟨 오늘 외운 문제 ${g.pending} · 남은 칸 ${g.hp}  (칸을 누르면 문제 목록)",
             color = com.suhwak.app.ui.theme.Sea.Ink,
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.padding(top = 8.dp),
@@ -1069,17 +1069,17 @@ private fun GiantPanel(g: GiantState, f: GiantFish, vm: FishingViewModel) {
                 Text("100칸을 다 채웠어요! 지쳐서 떠올랐어요", color = com.suhwak.app.ui.theme.Sea.Warm, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(10.dp))
                 PrimaryButton(
-                    if (vm.giantReview) "📖 틀린 단어 보고 다시 도전" else "🏆 최종전: ${f.name} 끌어올리기!",
+                    if (vm.giantReview) "📖 틀린 문제 보고 다시 도전" else "🏆 최종전: ${f.name} 끌어올리기!",
                     { if (vm.giantReview) vm.openReview() else vm.startGiant() },
                 )
             }
             g.pending > 0 -> Text(
-                "오늘의 낚시에 성공하면 노란 칸 ${g.pending}개가 작살로 바뀌어요!",
+                "오늘의 수확에 성공하면 노란 칸 ${g.pending}개가 작살로 바뀌어요!",
                 color = com.suhwak.app.ui.theme.Sea.Warm,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold,
             )
-            else -> Text("단어를 외우고 오늘의 낚시에 성공하면 칸이 채워져요", color = com.suhwak.app.ui.theme.Sea.Ink, style = MaterialTheme.typography.bodyMedium)
+            else -> Text("문제를 외우고 오늘의 수확에 성공하면 칸이 채워져요", color = com.suhwak.app.ui.theme.Sea.Ink, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
@@ -1089,7 +1089,7 @@ private fun GiantPanel(g: GiantState, f: GiantFish, vm: FishingViewModel) {
 private fun GiantWords(g: GiantState, f: GiantFish, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("${f.emoji} ${f.name}의 단어 100개") },
+        title = { Text("${f.emoji} ${f.name}의 문제 100개") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("🟦 작살 꽂힘 · 🟨 오늘 외움 · ⬜ 아직", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
@@ -1142,7 +1142,7 @@ fun FishLog(fishing: Fishing, onDismiss: () -> Unit) {
                         repeat(7 - week.size) { Spacer(Modifier.weight(1f)) }
                     }
                 }
-                Text("이번 달 ${caught}일 낚았어요 🎣", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                Text("이번 달 ${caught}일 수확했어요 🧺", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("닫기") } },
@@ -1153,9 +1153,9 @@ fun FishLog(fishing: Fishing, onDismiss: () -> Unit) {
 @Composable
 private fun GiantReview(vm: FishingViewModel, tts: TextToSpeech?) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
-        Text("📖 틀린 단어 복습", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text("📖 틀린 문제 복습", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text(
-            "하나씩 눌러 발음을 들어 보고 뜻을 읽어 보세요. 다 보면 바로 다시 도전할 수 있어요.",
+            "하나씩 눌러 발음을 들어 보고 정답을 읽어 보세요. 다 보면 바로 다시 도전할 수 있어요.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.outline,
         )

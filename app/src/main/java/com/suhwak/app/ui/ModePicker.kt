@@ -71,8 +71,8 @@ fun ModePicker(modes: List<StudyMode>, staged: Boolean, onChange: (modes: List<S
                 FilterChip(selected = !staged, onClick = { onChange(modes, false) }, label = { Text("골고루 섞기") })
             }
             Text(
-                if (staged) "단어 전체가 1단계를 끝내면 2단계로 넘어가요. 2단계부터는 한 번 맞히면 통과예요."
-                else "단어장 보기를 먼저 하고, 나머지 방식은 무작위로 섞여 나와요.",
+                if (staged) "문제 전체가 1단계를 끝내면 2단계로 넘어가요. 2단계부터는 한 번 맞히면 통과예요."
+                else "문제집 보기를 먼저 하고, 나머지 방식은 무작위로 섞여 나와요.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.outline,
                 modifier = Modifier.padding(horizontal = 16.dp),

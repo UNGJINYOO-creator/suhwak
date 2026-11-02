@@ -81,7 +81,7 @@ fun WrongNoteScreen(onBack: () -> Unit, onStudy: () -> Unit, vm: WrongNoteViewMo
         if (rows == null) return@Scaffold
         Column(Modifier.fillMaxSize().padding(padding)) {
             Text(
-                "퀴즈에서 2번 틀린 단어가 모여요. 연속 ${WrongNote.CLEAR_STREAK}번 맞히면 빠져요.",
+                "퀴즈에서 2번 틀린 문제가 모여요. 연속 ${WrongNote.CLEAR_STREAK}번 맞히면 빠져요.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.outline,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),

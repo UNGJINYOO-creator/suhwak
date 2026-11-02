@@ -85,7 +85,7 @@ class ReviewViewModel(app: Application) : AndroidViewModel(app) {
     fun claim(reward: Reward) {
         if (game.claim(reward) && StudySettings(getApplication()).alertCoupon) {
             viewModelScope.launch {
-                ParentAlerts.send(getApplication(), "🎟 쿠폰을 받았어요: ${reward.name} (🐟${reward.cost}마리)")
+                ParentAlerts.send(getApplication(), "🎟 쿠폰을 받았어요: ${reward.name} (🍎${reward.cost}개)")
             }
         }
         refresh()
@@ -137,7 +137,7 @@ fun ReviewScreen(
                     if (due > 0) {
                         Text("오늘 복습 ${due}개", style = MaterialTheme.typography.titleLarge)
                         Text(
-                            "잊어버리기 전에 다시 볼 단어예요",
+                            "잊어버리기 전에 다시 볼 문제예요",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.outline,
                         )
@@ -147,14 +147,14 @@ fun ReviewScreen(
                         Text("오늘 복습은 끝났어요 👍", style = MaterialTheme.typography.titleLarge)
                         Text(
                             nextDue?.let { "다음 복습: " + SimpleDateFormat("M월 d일", Locale.KOREA).format(Date(it)) }
-                                ?: "단어를 학습하면 복습 일정이 잡혀요",
+                                ?: "문제를 학습하면 복습 일정이 잡혀요",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.outline,
                         )
                     }
                     if (active.isNotEmpty()) {
                         Spacer(Modifier.height(8.dp))
-                        SecondaryButton("모든 단어장 합쳐서 학습", onStudyAll)
+                        SecondaryButton("모든 문제집 합쳐서 학습", onStudyAll)
                     }
                 }
             }
@@ -162,7 +162,7 @@ fun ReviewScreen(
                 Panel {
                     Text("📊 주간 리포트", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "최근 7일 공부 시간, 정답률, 기억 상태, 자주 틀린 단어를 부모님이 보기 좋게 정리했어요",
+                        "최근 7일 공부 시간, 정답률, 기억 상태, 자주 틀린 문제를 부모님이 보기 좋게 정리했어요",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline,
                     )
@@ -177,8 +177,8 @@ fun ReviewScreen(
                         Text("🏅 × ${vm.badges}", style = MaterialTheme.typography.titleSmall)
                     }
                     Text(
-                        if (vm.settings.dailyGoalMinutes > 0) "하루 목표 ${vm.settings.dailyGoalMinutes}분을 채우면 도장을 찍어요. 7일 연속이면 배지와 물고기 20마리!"
-                        else "하루에 한 번 학습하면 도장을 찍어요. 7일 연속이면 배지와 물고기 20마리!",
+                        if (vm.settings.dailyGoalMinutes > 0) "하루 목표 ${vm.settings.dailyGoalMinutes}분을 채우면 도장을 찍어요. 7일 연속이면 배지와 열매 20개!"
+                        else "하루에 한 번 학습하면 도장을 찍어요. 7일 연속이면 배지와 열매 20개!",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline,
                     )
@@ -218,7 +218,7 @@ fun ReviewScreen(
                     Spacer(Modifier.height(12.dp))
                     Row(Modifier.fillMaxWidth()) {
                         Stat("연속 학습", "${vm.streak}일", Modifier.weight(1f))
-                        Stat("전체 단어", "${active.size}개", Modifier.weight(1f))
+                        Stat("전체 문제", "${active.size}개", Modifier.weight(1f))
                         Stat("정답률", vm.accuracy?.let { "$it%" } ?: "-", Modifier.weight(1f))
                     }
                 }
@@ -232,17 +232,17 @@ fun ReviewScreen(
             }
             item {
                 Panel {
-                    Text("단어 단계", style = MaterialTheme.typography.titleMedium)
+                    Text("문제 단계", style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.height(12.dp))
                     val total = active.size.coerceAtLeast(1)
-                    StageRow("새 단어", active.count { it.box == 0 && !it.mastered }, total)
+                    StageRow("새 문제", active.count { it.box == 0 && !it.mastered }, total)
                     StageRow("배우는 중 (1~2단계)", active.count { it.box in 1..2 && !it.mastered }, total)
                     StageRow("익숙해요 (3단계 이상)", active.count { it.box >= 3 && !it.mastered }, total)
                     StageRow("외웠어요", active.count { it.mastered }, total)
                     val excluded = words.size - active.size
                     if (excluded > 0) {
                         Text(
-                            "학습에서 뺀 단어 ${excluded}개",
+                            "학습에서 뺀 문제 ${excluded}개",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.outline,
                             modifier = Modifier.padding(top = 4.dp),
@@ -254,7 +254,7 @@ fun ReviewScreen(
             if (hard.isNotEmpty()) {
                 item {
                     Panel {
-                        Text("자주 틀린 단어", style = MaterialTheme.typography.titleMedium)
+                        Text("자주 틀린 문제", style = MaterialTheme.typography.titleMedium)
                         Spacer(Modifier.height(8.dp))
                         hard.forEach { HardWordRow(it) }
                     }
@@ -349,11 +349,11 @@ private fun RewardPanel(vm: ReviewViewModel) {
     Panel {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("보상 쿠폰", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-            Text("🐟 ${vm.stars}마리", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            Text("🍎 ${vm.stars}개", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
         }
         if (vm.rewards.isEmpty()) {
             Text(
-                "부모님이 설정 → 보상 쿠폰에서 보상을 정하면 여기서 낚은 물고기로 쿠폰을 받을 수 있어요.",
+                "부모님이 설정 → 보상 쿠폰에서 보상을 정하면 여기서 수확한 열매로 쿠폰을 받을 수 있어요.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.outline,
             )
@@ -362,10 +362,10 @@ private fun RewardPanel(vm: ReviewViewModel) {
             Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(r.name, style = MaterialTheme.typography.bodyLarge)
-                    Text("🐟 ${r.cost}마리", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                    Text("🍎 ${r.cost}개", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                 }
                 TextButton(onClick = { toClaim = r }, enabled = vm.stars >= r.cost) {
-                    Text(if (vm.stars >= r.cost) "쿠폰 받기" else "🐟 ${r.cost - vm.stars}마리 더")
+                    Text(if (vm.stars >= r.cost) "쿠폰 받기" else "🍎 ${r.cost - vm.stars}개 더")
                 }
             }
         }
@@ -388,7 +388,7 @@ private fun RewardPanel(vm: ReviewViewModel) {
     }
     toClaim?.let { r ->
         ConfirmDialog(
-            text = "물고기 ${r.cost}마리로 '${r.name}' 쿠폰을 받을까요?",
+            text = "열매 ${r.cost}개로 '${r.name}' 쿠폰을 받을까요?",
             onDismiss = { toClaim = null },
             onConfirm = { vm.claim(r); toClaim = null },
             confirmText = "받기",

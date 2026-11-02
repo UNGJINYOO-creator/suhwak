@@ -109,7 +109,7 @@ fun WeeklyReportScreen(onBack: () -> Unit, vm: WeeklyReportViewModel = viewModel
             if (!r.hasData) {
                 item {
                     ReportPanel("아직 이번 주 기록이 없어요") {
-                        Muted("단어 공부를 하면 공부 시간, 정답률, 약한 단어가 여기에 쌓여요.")
+                        Muted("문제 공부를 하면 공부 시간, 정답률, 약한 문제가 여기에 쌓여요.")
                     }
                 }
                 return@LazyColumn
@@ -152,7 +152,7 @@ fun WeeklyReportScreen(onBack: () -> Unit, vm: WeeklyReportViewModel = viewModel
             }
             if (r.knownTrend.size >= 2) {
                 item {
-                    ReportPanel("외운 단어 변화", "서로 다른 날 2번 이상 맞힌 단어만 셉니다") {
+                    ReportPanel("외운 문제 변화", "서로 다른 날 2번 이상 맞힌 문제만 셉니다") {
                         TrendLine(r.knownTrend)
                         val gain = r.knownTrend.last().second - r.knownTrend.first().second
                         Muted("${r.knownTrend.first().first}부터 ${gain}개 늘었어요.")
@@ -190,14 +190,14 @@ fun WeeklyReportScreen(onBack: () -> Unit, vm: WeeklyReportViewModel = viewModel
                         }
                         if (r.speech.first > 0) {
                             FactRow("말하기 성공", "${r.speech.second} / ${r.speech.first}개")
-                            if (r.speech.third.isNotEmpty()) FactRow("발음이 어려웠던 단어", r.speech.third.take(5).joinToString(", "))
+                            if (r.speech.third.isNotEmpty()) FactRow("발음이 어려웠던 문제", r.speech.third.take(5).joinToString(", "))
                         }
                     }
                 }
             }
             if (r.fishing.isNotEmpty()) {
                 item {
-                    ReportPanel("🎣 낚시 일지", "낚시에 성공한 날 ${r.fishing.size}일") {
+                    ReportPanel("🧺 수확 일지", "수확에 성공한 날 ${r.fishing.size}일") {
                         r.fishing.forEach { (day, fish) -> FactRow(day, fish) }
                     }
                 }
@@ -211,7 +211,7 @@ fun WeeklyReportScreen(onBack: () -> Unit, vm: WeeklyReportViewModel = viewModel
             }
             item {
                 Muted(
-                    "이렇게 계산했어요 · 외운 단어 = 서로 다른 날 2번 이상 맞힌 단어 · 정답률 = 객관식·빈칸·듣고 쓰기·게임 문제 기준(뜻 카드 넘기기는 빼요) " +
+                    "이렇게 계산했어요 · 외운 문제 = 서로 다른 날 2번 이상 맞힌 문제 · 정답률 = 객관식·빈칸·듣고 쓰기·게임 문제 기준(정답 카드 넘기기는 빼요) " +
                         "· 공부 시간 = 1분 넘게 손을 안 대면 멈추는 순수 공부 시간 · 등급은 한 번 오르면 내려가지 않아요 · 모든 기록은 이 폰 안에만 있어요.",
                 )
             }
@@ -265,7 +265,7 @@ private fun Kpis(r: WeeklyReport) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Kpi("총 공부 시간", if (minutes >= 60) "${minutes / 60}시간 ${minutes % 60}분" else "${minutes}분",
                 change(minutes, prevMinutes, "분")?.let { "$it (지난주 ${prevMinutes}분)" }, minutes >= prevMinutes, Modifier.weight(1f))
-            Kpi("새로 익힌 단어", "${r.learned}개",
+            Kpi("새로 익힌 문제", "${r.learned}개",
                 change(r.learned.toLong(), r.prevLearned.toLong(), "개")?.let { "$it (지난주 ${r.prevLearned}개)" }, r.learned >= r.prevLearned, Modifier.weight(1f))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -446,7 +446,7 @@ private fun StagesPanel(s: WeeklyReport.Stages) {
         Triple("아직 안 배움", s.new, StageColors[0]),
     )
     val total = s.total.coerceAtLeast(1)
-    ReportPanel("전체 단어 기억 상태", "${s.total}개") {
+    ReportPanel("전체 문제 기억 상태", "${s.total}개") {
         Row(Modifier.fillMaxWidth().height(26.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             parts.filter { it.second > 0 }.forEach { (_, n, c) ->
                 Box(Modifier.weight(n.toFloat()).fillMaxHeight().background(c, RoundedCornerShape(4.dp)))
@@ -462,7 +462,7 @@ private fun StagesPanel(s: WeeklyReport.Stages) {
             }
         }
         Spacer(Modifier.height(4.dp))
-        Muted("학습 중 = 1~2일 간격으로 다시 보는 단어 · 복습 중 = 3~13일 간격 · 장기 기억 = 14일 넘게 지나도 맞히는 단어")
+        Muted("학습 중 = 1~2일 간격으로 다시 보는 문제 · 복습 중 = 3~13일 간격 · 장기 기억 = 14일 넘게 지나도 맞히는 문제")
     }
 }
 
@@ -493,20 +493,20 @@ private fun DueBars(due: List<Pair<String, Int>>) {
 
 @Composable
 private fun DecksPanel(decks: List<WeeklyReport.DeckRow>) {
-    ReportPanel("단어장별 진도", "이번 주에 공부한 단어장") {
+    ReportPanel("문제집별 진도", "이번 주에 공부한 문제집") {
         decks.forEachIndexed { i, d ->
             if (i > 0) HorizontalDivider(Modifier.padding(vertical = 6.dp))
             Text(d.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(4.dp))
             ThickProgress(d.known / d.words.coerceAtLeast(1).toFloat(), Modifier.fillMaxWidth())
-            Muted("외운 단어 ${d.known} / ${d.words}개 (${d.known * 100 / d.words.coerceAtLeast(1)}%) · 이번 주 ${d.answered}문제" + (d.accuracy?.let { " · 정답률 $it%" } ?: ""))
+            Muted("외운 문제 ${d.known} / ${d.words}개 (${d.known * 100 / d.words.coerceAtLeast(1)}%) · 이번 주 ${d.answered}문제" + (d.accuracy?.let { " · 정답률 $it%" } ?: ""))
         }
     }
 }
 
 @Composable
 private fun HardWordsPanel(words: List<WeeklyReport.HardWord>) {
-    ReportPanel("가장 많이 틀린 단어", "이번 주 2번 이상 틀린 단어") {
+    ReportPanel("가장 많이 틀린 문제", "이번 주 2번 이상 틀린 문제") {
         words.forEachIndexed { i, w ->
             if (i > 0) HorizontalDivider(Modifier.padding(vertical = 4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {

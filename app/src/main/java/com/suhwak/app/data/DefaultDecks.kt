@@ -2,69 +2,46 @@ package com.suhwak.app.data
 
 import android.content.Context
 
-/** Built-in word lists added once, on first launch or after an update. */
+/**
+ * 수확중 기본 씨앗: 처음 켤 때(또는 업데이트 뒤) 한 번 넣는 중2-1 수학 문제 (assets/seeds_basic.json).
+ * 문제는 tools/make_basic_seeds.py가 숫자를 바꿔 가며 만들고 정답은 코드로 계산해 둔 것이라 틀린 정답이 없다.
+ * 단원마다 씨앗 창고 하나 ("유리수와 순환소수 · 기본 씨앗 중2-1" ...).
+ *
+ * 낚아보카에서 물려받은 영단어 1800 기본 단어장은 수확중에서는 쓰지 않으므로, 예전 빌드(1·2)로 들어간 것은 지운다.
+ */
 object DefaultDecks {
-    private const val KEY_MIDDLE = "seededMiddle"
-    /** Set once the list is the 뜯어먹는 영단어 1800 (60 DAYs); older installs are switched over. */
-    private const val KEY_1800 = "middle1800"
+    private const val KEY_MATH = "seededMathBasic1"
+    private const val OLD_ENGLISH_DECK = "중학 영단어"
 
-    private fun rows(context: Context) = context.assets.open("default_middle.tsv").bufferedReader().readLines()
-        .mapNotNull { line ->
-            val parts = line.split('\t')
-            if (parts.size < 3 || parts[0].isBlank()) null else parts
-        }
+    private fun basicText(context: Context): String =
+        context.assets.open("seeds_basic.json").bufferedReader().use { it.readText() }
 
-    /** The built-in words in DAY order (lowercase), for the 거대 물고기 blocks. */
-    fun wordOrder(context: Context): List<String> = rows(context).map { it[0].trim().lowercase() }
+    private fun basicDecks(context: Context): List<SeedImport.SeedDeck> =
+        runCatching { SeedImport.parse(basicText(context)) }.getOrDefault(emptyList())
 
-    /**
-     * Adds the 중학 영단어 종합단어장 from assets/default_middle.tsv (word, part of speech, meaning, example),
-     * and fills in examples for words that have none yet.
-     */
+    /** 기본 씨앗을 순서대로 (거대 작물 진도 칸 순서). */
+    fun wordOrder(context: Context): List<String> =
+        basicDecks(context).flatMap { d -> d.seeds.map { it.text.trim().lowercase() } }
+
     suspend fun seed(context: Context) {
         val prefs = context.applicationContext.getSharedPreferences("defaults", Context.MODE_PRIVATE)
+        if (prefs.getBoolean(KEY_MATH, false)) return
         val dao = AppDatabase.get(context).wordDao()
-        if (!prefs.getBoolean(KEY_MIDDLE, false)) {
-            val deckId = dao.insertDeck(Deck(name = "중학 영단어", emoji = "📚", isCollection = true))
-            // addedAt = 0 so these count as "old" words and new photo decks get the 최근 추가 share.
-            dao.insertWords(rows(context).map {
-                Word(deckId = deckId, text = it[0], pos = it[1], meaning = it[2], example = it.getOrElse(3) { "" }, addedAt = 0)
-            })
-            prefs.edit().putBoolean(KEY_MIDDLE, true).putBoolean(KEY_1800, true).apply()
+
+        // 빌드 1·2에서 들어간 영단어 기본 단어장 지우기 (수확중은 수학 앱)
+        dao.getAllDecks().filter { it.name == OLD_ENGLISH_DECK }.forEach { deck ->
+            dao.deleteWords(dao.getOwnWords(deck.id))
+            dao.deleteDeck(deck.id)
         }
-        if (!prefs.getBoolean(KEY_1800, false)) {
-            // The built-in list became the 1800-word book. Words in both keep their study progress and get the
-            // book's meaning; the rest of the old built-in words go, and the new ones are added.
-            // Built-in words have addedAt = 0, so photo decks are left alone.
-            val old = dao.getAllWords().filter { it.addedAt == 0L }
-            val deckId = old.groupingBy { it.deckId }.eachCount().maxByOrNull { it.value }?.key
-                ?: dao.insertDeck(Deck(name = "중학 영단어", emoji = "📚", isCollection = true))
-            val byText = old.filter { it.deckId == deckId }.groupBy { it.text.trim().lowercase() }
-            val kept = mutableSetOf<Long>()
-            val added = mutableListOf<Word>()
-            rows(context).forEach { r ->
-                val w = byText[r[0].lowercase()]?.firstOrNull()
-                if (w == null) {
-                    added += Word(deckId = deckId, text = r[0], pos = r[1], meaning = r[2], example = r.getOrElse(3) { "" }, addedAt = 0)
-                } else {
-                    kept += w.id
-                    dao.updateWord(w.copy(text = r[0], pos = r[1], meaning = r[2], example = r.getOrElse(3) { w.example }))
-                }
-            }
-            old.filter { it.deckId == deckId && it.id !in kept }.forEach { dao.deleteWord(it) }
-            dao.insertWords(added)
-            prefs.edit().putBoolean(KEY_1800, true).apply()
+
+        val known = dao.allSourceIds().toHashSet()
+        for (d in basicDecks(context)) {
+            val fresh = d.seeds.filter { it.sourceId.isEmpty() || it.sourceId !in known }
+            if (fresh.isEmpty()) continue
+            val deckId = dao.findDeckByName(d.name)?.id ?: dao.insertDeck(Deck(name = d.name, emoji = "🌱"))
+            // addedAt = 0: 기본 씨앗은 '오래된' 것으로 쳐서, 직접 가져온 씨앗이 최근 추가로 보이게 한다.
+            dao.insertWords(fresh.map { it.copy(deckId = deckId, addedAt = 0) })
         }
-        run {
-            // Each start: any word with the same spelling gets the example, new photo words included.
-            val withExample = rows(context).filter { it.size > 3 && it[3].isNotBlank() }
-            // can, may, will have two senses: match the part of speech first, then the spelling.
-            val byPos = withExample.associate { "${it[0].lowercase()}|${it[1]}" to it[3] }
-            val byText = withExample.associate { it[0].lowercase() to it[3] }
-            dao.getAllWords().filter { it.example.isBlank() }.forEach { w ->
-                val key = w.text.trim().lowercase()
-                (byPos["$key|${w.pos}"] ?: byText[key])?.let { dao.updateWord(w.copy(example = it)) }
-            }
-        }
+        prefs.edit().putBoolean(KEY_MATH, true).apply()
     }
 }

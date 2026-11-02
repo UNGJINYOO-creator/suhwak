@@ -18,7 +18,8 @@ class SeedTest {
         assertEquals(3, decks[0].seeds.size)
         val s = decks[0].seeds[0]
         assertEquals("mc", s.qtype); assertEquals("②", s.meaning); assertEquals("bk_x_p023_1", s.sourceId)
-        assertEquals("\$\\frac{7}{250}\$을 소수로?", s.text)
+        assertEquals("\$\\frac{7}{250}\$을 소수로?", s.question)
+        assertEquals("7/250을 소수로?", s.text)
         assertEquals(listOf("0.28", "0.028", "2.8", "28"), SeedImport.choicesOf(s))
         assertEquals(2, SeedImport.stepsOf(s).size)
         assertEquals("short", decks[0].seeds[1].qtype)

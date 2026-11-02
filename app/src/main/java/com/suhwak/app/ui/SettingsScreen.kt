@@ -185,8 +185,8 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                     .background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(16.dp))
                     .padding(16.dp),
             ) {
-                Text("➕ 단어 추가", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("사진·스크린샷으로 단어를 넣거나 단어장을 만들어요", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                Text("➕ 문제 추가", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("사진·스크린샷으로 문제를 넣거나 문제집을 만들어요", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     SecondaryButton("📷 사진 찍기", { onAdd(AddKind.CAMERA) }, Modifier.weight(1f))
@@ -194,13 +194,13 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                 }
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SecondaryButton("📒 빈 단어장", { onAdd(AddKind.DECK) }, Modifier.weight(1f))
-                    SecondaryButton("📚 종합단어장", { onAdd(AddKind.COLLECTION) }, Modifier.weight(1f))
+                    SecondaryButton("📒 빈 문제집", { onAdd(AddKind.DECK) }, Modifier.weight(1f))
+                    SecondaryButton("📚 종합 문제집", { onAdd(AddKind.COLLECTION) }, Modifier.weight(1f))
                 }
                 Spacer(Modifier.height(8.dp))
                 var showCheck by remember { mutableStateOf(false) }
                 if (showCheck) DeckCheckDialog(null, onDismiss = { showCheck = false })
-                SecondaryButton("🔍 전체 단어장 점검 (오타·뜻)", { showCheck = true }, Modifier.fillMaxWidth())
+                SecondaryButton("🔍 전체 문제집 점검 (오타·정답)", { showCheck = true }, Modifier.fillMaxWidth())
             }
             Text(
                 "아래 항목을 누르면 펼쳐져요. 바꾸면 바로 반영돼요. 다 고친 뒤 아래 💾 설정 저장을 누르면 연결된 다른 기기에도 보내요.",
@@ -240,14 +240,14 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                 Group(
                     "🎯 하루 목표",
                     listOf(
-                        if (dailyWords > 0) "단어 ${dailyWords}개" else "단어 목표 없음",
+                        if (dailyWords > 0) "문제 ${dailyWords}개" else "문제 목표 없음",
                         if (goal > 0) "${goal}분" else "시간 목표 없음",
                         "알림 ${Opt.reminderLabel(reminderHour)}",
                     ).joinToString(" · "),
                     open == "goal", { toggle("goal") },
                 ) {
                     Body {
-                        Labeled("하루 외울 단어", "객관식·빈칸·듣고 쓰기에서 맞힌 단어만 세요. 오늘 학습에 새 단어도 이만큼 나와요.") {
+                        Labeled("하루 외울 문제", "객관식·빈칸·듣고 쓰기에서 맞힌 문제만 세요. 오늘 학습에 새 문제도 이만큼 나와요.") {
                             NumberChoice(dailyWords, Opt.dailyWords, "개", 300, min = 0) { dailyWords = it; settings.dailyWords = it }
                         }
                         Labeled("하루 최소 학습 시간", "채우면 오늘 목표 달성, 텔레그램으로 결과가 가요") {
@@ -277,7 +277,7 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                         modes = m; staged = st; settings.modes = m; settings.staged = st
                     }
                     Body {
-                        Labeled("빈칸 난이도", "자동은 잘 외운 단어일수록 빈칸이 늘어나요") {
+                        Labeled("빈칸 난이도", "자동은 잘 외운 문제일수록 빈칸이 늘어나요") {
                             Choice(blank, BlankLevel.entries.map { it to it.label }) { blank = it; settings.blankLevel = it }
                         }
                         if (StudyMode.DICTATION in modes) {
@@ -304,7 +304,7 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                 ) {
                     Body {
                         SwitchRow("카드 섞기", "학습할 때마다 순서를 무작위로 (끄면 알파벳 순)", shuffle) { shuffle = it; settings.shuffle = it }
-                        SwitchRow("뒷면 먼저", "뜻을 먼저 보고 영어 단어 떠올리기", backFirst) { backFirst = it; settings.backFirst = it }
+                        SwitchRow("뒷면 먼저", "정답을 먼저 보고 수학 문제 떠올리기", backFirst) { backFirst = it; settings.backFirst = it }
                         Labeled("글자 크기") {
                             Choice(textScale, Opt.textScale) { textScale = it; settings.textScale = it }
                         }
@@ -320,13 +320,13 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                     }
                 }
                 Group(
-                    "🎣 단어 낚시 게임",
+                    "🧺 문제 수확 게임",
                     "난이도 ${fishLevel?.name ?: "직접 조정"} · " + (if (fishTries > 0) "하루 ${fishTries}번" else "횟수 무제한"),
                     open == "fish", { toggle("fish") },
                 ) {
                     Body {
                         Text(
-                            "오늘 목표를 채우면 열리는 낚시 게임이에요. 맞히면 물고기를 끌어오고, 틀리거나 가만히 있으면 멀어져요.",
+                            "오늘 목표를 채우면 열리는 수확 게임이에요. 맞히면 열매를 끌어오고, 틀리거나 가만히 있으면 멀어져요.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.outline,
                         )
@@ -360,7 +360,7 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                         }
                         if (fishDetail) key(fishReset) {
                             Text(
-                                "맞혀서 끌어오는 거리가 도망가는 거리보다 넉넉해야 낚을 수 있어요.",
+                                "맞혀서 끌어오는 거리가 도망가는 거리보다 넉넉해야 수확할 수 있어요.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.outline,
                             )
@@ -431,7 +431,7 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                                 )
                             }
                         }
-                        Labeled("보상 쿠폰", "아이가 단어를 외워 낚은 물고기로 받을 수 있는 보상이에요. 쿠폰은 복습·통계 탭에서 받아요.") {
+                        Labeled("보상 쿠폰", "아이가 문제를 외워 수확한 열매로 받을 수 있는 보상이에요. 쿠폰은 복습·통계 탭에서 받아요.") {
                             RewardEditor(game) { rewardCount = game.rewards.size; saved() }
                         }
                     }
@@ -459,7 +459,7 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                 Group("💾 백업", "휴대폰을 바꿀 때를 대비해 저장해 둬요", open == "backup", { toggle("backup") }) {
                     Body {
                         Text(
-                            "단어장, 학습 기록, 물고기·레벨, 설정을 파일 하나로 저장해요. 구글 드라이브나 카톡 나에게 보내기로 보관하세요.",
+                            "문제집, 학습 기록, 열매·레벨, 설정을 파일 하나로 저장해요. 구글 드라이브나 카톡 나에게 보내기로 보관하세요.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.outline,
                         )
@@ -492,7 +492,7 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                 }
                 Group(
                     "⚙️ 고급",
-                    "카드 ${hand}장씩 돌리기 · 최근 단어 ${recentShare}% · ${idle}초 멈춤",
+                    "카드 ${hand}장씩 돌리기 · 최근 문제 ${recentShare}% · ${idle}초 멈춤",
                     open == "advanced", { toggle("advanced") },
                 ) {
                     Body {
@@ -512,16 +512,16 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                             repeatMissed = it; settings.repeatMissed = it
                         }
                         Spacer(Modifier.height(12.dp))
-                        Text("종합단어장", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                        Text("종합 문제집", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                         Text(
-                            "최근 넣은 단어를 얼마나 내고, 나머지는 복습할 때가 된 것과 자주 틀린 단어로 채워요.",
+                            "최근 넣은 문제를 얼마나 내고, 나머지는 복습할 때가 된 것과 자주 틀린 문제로 채워요.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.outline,
                         )
-                        Labeled("최근 추가 단어 비율", "10문제 중 새 단어 ${recentShare / 10}문제 · 기존 단어 ${10 - recentShare / 10}문제") {
+                        Labeled("최근 추가 문제 비율", "10문제 중 새 문제 ${recentShare / 10}문제 · 기존 문제 ${10 - recentShare / 10}문제") {
                             NumberChoice(recentShare, Opt.recentShare, "%", 100) { recentShare = it; settings.recentShare = it }
                         }
-                        Labeled("며칠 안에 넣은 단어를 '최근'으로 볼까요?") {
+                        Labeled("며칠 안에 넣은 문제를 '최근'으로 볼까요?") {
                             NumberChoice(recentDays, Opt.recentDays, "일", 60) { recentDays = it; settings.recentDays = it }
                         }
                         Spacer(Modifier.height(12.dp))
@@ -533,7 +533,7 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                         Text("찍기 막기", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                         GuessLimitField(settings)
                         Text(
-                            "맞힌 단어는 처음 1일 뒤에 복습으로 나오고, 맞힐 때마다 간격이 1.4배(외웠어요는 2.2배)로 늘어요. " +
+                            "맞힌 문제는 처음 1일 뒤에 복습으로 나오고, 맞힐 때마다 간격이 1.4배(외웠어요는 2.2배)로 늘어요. " +
                                 "틀리면 간격이 절반으로 줄고 오늘 다시 나와요.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.outline,
@@ -684,7 +684,7 @@ private fun NewPinDialog(onDismiss: () -> Unit, onDone: (String) -> Unit) {
                 PinField(second, { second = it }, "한 번 더 입력")
                 if (mismatch) Text("두 비밀번호가 달라요", color = MaterialTheme.colorScheme.error)
                 Text(
-                    "비밀번호를 잊으면 앱을 지웠다 다시 깔아야 하고, 그러면 단어도 지워져요. 꼭 기억해 두세요.",
+                    "비밀번호를 잊으면 앱을 지웠다 다시 깔아야 하고, 그러면 문제도 지워져요. 꼭 기억해 두세요.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.outline,
                 )
@@ -716,7 +716,7 @@ private fun SyncEditor() {
         }
     }
     Text(
-        "태블릿과 폰에서 같은 가족 코드를 쓰면 단어 진도, 물고기, 거대 물고기, 설정이 저절로 맞춰져요. 앱을 닫을 때와 열 때마다 맞춰요.",
+        "태블릿과 폰에서 같은 가족 코드를 쓰면 문제 진도, 열매, 거대 열매, 설정이 저절로 맞춰져요. 앱을 닫을 때와 열 때마다 맞춰요.",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.outline,
     )
@@ -835,7 +835,7 @@ private fun GuessLimitField(settings: StudySettings) {
         when {
             tenths == null -> "숫자를 써 주세요 (예: 1, 1.5, 2)"
             tenths <= 0 -> "0초: 꺼져 있어요. 아무리 빨리 골라도 정답으로 쳐요"
-            else -> "너무 빨리 고르면 물고기·목표·정답률에 안 들어가고, 낚시에서는 0m예요. 0을 쓰면 꺼져요"
+            else -> "너무 빨리 고르면 열매·목표·정답률에 안 들어가고, 수확에서는 0m예요. 0을 쓰면 꺼져요"
         },
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.outline,

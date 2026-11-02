@@ -41,14 +41,14 @@ fun CollectionDialog(
     dismissText: String = "추가 안 함",
 ) {
     var chosen by remember { mutableLongStateOf(if (current > 0) current else collections.firstOrNull()?.id ?: NEW) }
-    var name by remember { mutableStateOf("종합 단어장") }
+    var name by remember { mutableStateOf("종합 문제집") }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
-                    "단어를 복사하지 않고 연결해요. 종합단어장에서 외운 단어는 이 단어장에도 똑같이 반영돼요.",
+                    "문제를 복사하지 않고 연결해요. 종합 문제집에서 외운 문제는 이 문제집에도 똑같이 반영돼요.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.outline,
                     modifier = Modifier.padding(bottom = 6.dp),
@@ -56,23 +56,23 @@ fun CollectionDialog(
                 collections.forEach { c ->
                     Option(c.name, chosen == c.id) { chosen = c.id }
                 }
-                Option("새 단어장 만들기", chosen == NEW) { chosen = NEW }
+                Option("새 문제집 만들기", chosen == NEW) { chosen = NEW }
                 if (chosen == NEW) {
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
-                        label = { Text("새 단어장 이름") },
+                        label = { Text("새 문제집 이름") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth().padding(start = 8.dp),
                     )
                 }
                 if (onRemove != null) {
-                    TextButton(onClick = onRemove) { Text("종합단어장에서 빼기", color = MaterialTheme.colorScheme.error) }
+                    TextButton(onClick = onRemove) { Text("종합 문제집에서 빼기", color = MaterialTheme.colorScheme.error) }
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = { if (chosen == NEW) onCreate(name.ifBlank { "종합 단어장" }) else onPick(chosen) }) { Text("추가") }
+            TextButton(onClick = { if (chosen == NEW) onCreate(name.ifBlank { "종합 문제집" }) else onPick(chosen) }) { Text("추가") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(dismissText) } },
     )

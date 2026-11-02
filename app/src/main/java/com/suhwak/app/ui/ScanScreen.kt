@@ -137,12 +137,12 @@ class ScanViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMod
     /** -1 creates a new deck; otherwise words are added to this deck. */
     val targetDeckId: Long = handle.get<Long>("deckId") ?: -1L
 
-    var status by mutableStateOf("사진에서 영어 단어를 찾는 중…")
+    var status by mutableStateOf("사진에서 수학 문제를 찾는 중…")
         private set
     var busy by mutableStateOf(true)
         private set
     var deckName by mutableStateOf(
-        SimpleDateFormat("M월 d일 HH:mm 단어장", Locale.KOREA).format(Date())
+        SimpleDateFormat("M월 d일 HH:mm 문제집", Locale.KOREA).format(Date())
     )
     val candidates = mutableStateListOf<Candidate>()
     /** Headwords left out for a strange spelling; one can be put back with [rescue]. */
@@ -165,7 +165,7 @@ class ScanViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMod
         val lines = mutableListOf<com.suhwak.app.ml.OcrLine>()
         var failed = 0
         uris.forEachIndexed { i, uri ->
-            if (uris.size > 1) status = "사진 ${i + 1}/${uris.size}에서 영어 단어를 찾는 중…"
+            if (uris.size > 1) status = "사진 ${i + 1}/${uris.size}에서 수학 문제를 찾는 중…"
             try {
                 val r = WordExtractor.extract(getApplication(), uri)
                 extracted += r.words.map { it to i }
@@ -186,7 +186,7 @@ class ScanViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMod
         }
         if (words.isEmpty()) {
             busy = false
-            status = "영어 단어를 찾지 못했어요. 글자가 잘 보이게 다시 찍어 보세요."
+            status = "수학 문제를 찾지 못했어요. 글자가 잘 보이게 다시 찍어 보세요."
             return
         }
         // A photo makes its own new deck, so every word goes in even if another deck has it.
@@ -202,7 +202,7 @@ class ScanViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMod
         dropped.addAll(droppedWords.filter { it.first.text.lowercase() !in foundTexts }.distinctBy { it.first.text.lowercase() }
             .map { (d, photo) -> DroppedCandidate(nextId++, d, photo) })
         // A strip of the photo under each word, to check the spelling and the meaning against the book.
-        status = "단어마다 사진 조각 만드는 중…"
+        status = "문제마다 사진 조각 만드는 중…"
         photos = uris.indices.mapNotNull { i ->
             val (w, h) = sizes[i] ?: return@mapNotNull null
             PhotoSpots(
@@ -218,11 +218,11 @@ class ScanViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMod
             bmp.recycle()
         }
         val fromPhoto = candidates.count { !MeaningCheck.suspicious(it.meaning) }
-        val found = "단어 ${candidates.size}개 (사진 속 뜻 ${fromPhoto}개)"
+        val found = "문제 ${candidates.size}개 (사진 속 정답 ${fromPhoto}개)"
 
         // 낚아보카 사전 first: when the photo says the same, the reviewed meaning (and its part of speech) goes in;
         // when they clearly differ, the book's meaning stays highlighted with the dictionary's next to it.
-        status = "낚아보카 사전으로 뜻 확인 중…"
+        status = "기본 문제으로 정답 확인 중…"
         val dict = runCatching { Dictionary.get(getApplication()) }.getOrNull()
         val checked = mutableSetOf<Int>()
         candidates.forEach { c ->
@@ -245,7 +245,7 @@ class ScanViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMod
         }
         if (candidates.all { it.id in checked }) {
             busy = false
-            status = "찾았어요: $found. 저장할 단어를 고르세요."
+            status = "찾았어요: $found. 저장할 문제를 고르세요."
             return
         }
 
@@ -254,7 +254,7 @@ class ScanViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMod
             EnKoTranslator.ensureModel()
         } catch (e: Exception) {
             busy = false
-            status = "$found. 번역 모델을 받지 못해 비어 있는 뜻은 직접 입력해 주세요."
+            status = "$found. 번역 모델을 받지 못해 비어 있는 정답은 직접 입력해 주세요."
             candidates.filter { it.id !in checked && MeaningCheck.looksGarbled(it.meaning) }.forEach { it.meaning = ""; it.source = "" }
             return
         }
@@ -263,14 +263,14 @@ class ScanViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMod
         // translation offered when the two don't share any syllable.
         val rest = candidates.filter { it.id !in checked }
         rest.forEachIndexed { i, c ->
-            status = "사전에 없는 단어 뜻 확인 중… ${i + 1}/${rest.size}"
+            status = "사전에 없는 문제 정답 확인 중… ${i + 1}/${rest.size}"
             // Translate as the same part of speech as the book (connect -> 연결하다, not 연결).
             val translated = runCatching { EnKoTranslator.translateAs(c.text, c.pos) }.getOrDefault("")
             if (MeaningCheck.suspicious(c.meaning)) {
                 if (translated.isNotBlank()) {
                     if (c.meaning.isNotBlank()) { c.suggestion = c.meaning; c.suggestionSource = "사진" }
                     c.meaning = translated
-                    c.source = "번역 (사진 뜻이 이상해서)"
+                    c.source = "번역 (사진 정답이 이상해서)"
                 }
             } else if (translated.isNotBlank() && MeaningCheck.nearMiss(c.meaning, translated)) {
                 // One syllable off from the translation: the photo letter was misread.
@@ -284,7 +284,7 @@ class ScanViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMod
             }
         }
         busy = false
-        status = "찾았어요: $found. 저장할 단어를 고르세요."
+        status = "찾았어요: $found. 저장할 문제를 고르세요."
     }
 
     fun setAll(selected: Boolean) = candidates.forEach { it.selected = selected }
@@ -328,7 +328,7 @@ class ScanViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMod
             targetDeckId
         } else {
             db.withTransaction {
-                val id = dao.insertDeck(Deck(name = deckName.ifBlank { "새 단어장" }))
+                val id = dao.insertDeck(Deck(name = deckName.ifBlank { "새 문제집" }))
                 dao.insertWords(chosen.map { (c, m) -> Word(deckId = id, text = c.text, meaning = m, pos = c.pos) })
                 id
             }
@@ -358,7 +358,7 @@ fun ScanScreen(
     val collections by vm.collections.collectAsStateWithLifecycle()
     askCollection?.let { id ->
         CollectionDialog(
-            title = "종합단어장에 추가할까요?",
+            title = "종합 문제집에 추가할까요?",
             collections = collections,
             current = 0,
             onPick = { c -> vm.link(id, c); askCollection = null; savedDeckId = id },
@@ -377,7 +377,7 @@ fun ScanScreen(
     savedDeckId?.let { id ->
         AlertDialog(
             onDismissRequest = { savedDeckId = null; onHome() },
-            title = { Text("단어 ${selectedCount}개를 저장했어요") },
+            title = { Text("문제 ${selectedCount}개를 저장했어요") },
             text = { Text("바로 학습할까요?") },
             confirmButton = { TextButton(onClick = { savedDeckId = null; onStudy(id) }) { Text("예, 학습할래요") } },
             dismissButton = { TextButton(onClick = { savedDeckId = null; onHome() }) { Text("아니오") } },
@@ -388,7 +388,7 @@ fun ScanScreen(
         topBar = {
             AppTopBar(
                 containerColor = MaterialTheme.colorScheme.surface,
-                title = { Text("단어 고르기") },
+                title = { Text("문제 고르기") },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "뒤로") }
                 },
@@ -397,7 +397,7 @@ fun ScanScreen(
         bottomBar = {
             if (vm.candidates.isNotEmpty()) {
                 PrimaryButton(
-                    "단어 ${selectedCount}개 저장",
+                    "문제 ${selectedCount}개 저장",
                     { vm.save { id -> if (vm.targetDeckId < 0) askCollection = id else savedDeckId = id } },
                     Modifier.padding(16.dp).navigationBarsPadding(),
                     enabled = selectedCount > 0 && !vm.busy,
@@ -424,7 +424,7 @@ fun ScanScreen(
                 OutlinedTextField(
                     value = vm.deckName,
                     onValueChange = { vm.deckName = it },
-                    label = { Text("단어장 이름") },
+                    label = { Text("문제집 이름") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 )
@@ -436,11 +436,11 @@ fun ScanScreen(
             if (!vm.busy) {
                 // 저장 전 요약: what goes in, what still needs a look, what was fixed or left out.
                 val parts = listOfNotNull(
-                    "넣을 단어 ${selectedCount}개",
-                    vm.candidates.count { it.source.startsWith("사전") }.takeIf { it > 0 }?.let { "사전 뜻 ${it}개" },
+                    "넣을 문제 ${selectedCount}개",
+                    vm.candidates.count { it.source.startsWith("사전") }.takeIf { it > 0 }?.let { "사전 정답 ${it}개" },
                     vm.candidates.count { it.needsCheck }.takeIf { it > 0 }?.let { "확인 필요 ${it}개" },
                     vm.candidates.count { it.original.isNotEmpty() }.takeIf { it > 0 }?.let { "스펠링 고침 ${it}개" },
-                    vm.dropped.size.takeIf { it > 0 }?.let { "뺀 단어 ${it}개" },
+                    vm.dropped.size.takeIf { it > 0 }?.let { "뺀 문제 ${it}개" },
                 )
                 Text(
                     parts.joinToString(" · "),
@@ -452,7 +452,7 @@ fun ScanScreen(
             Row(Modifier.padding(horizontal = 8.dp)) {
                 if (vm.crops.isNotEmpty()) {
                     TextButton(onClick = { showAllStrips = !showAllStrips }) {
-                        Text(if (showAllStrips) "사진 조각 접기" else "모든 단어 사진 보기")
+                        Text(if (showAllStrips) "사진 조각 접기" else "모든 문제 사진 보기")
                     }
                 }
                 if (vm.photos.isNotEmpty()) {
@@ -463,7 +463,7 @@ fun ScanScreen(
             var showRaw by remember { mutableStateOf(false) }
             if (vm.candidates.any { it.needsCheck }) {
                 Text(
-                    "노란 줄은 사진 속 뜻이 깨졌거나 번역과 달라서 확인이 필요한 단어예요. 아래 사진 조각과 비교하고 탭해서 고쳐 주세요. (파란 칸 = 영어, 초록 칸 = 뜻)",
+                    "노란 줄은 사진 속 정답이 깨졌거나 번역과 달라서 확인이 필요한 문제예요. 아래 사진 조각과 비교하고 탭해서 고쳐 주세요. (파란 칸 = 영어, 초록 칸 = 정답)",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.outline,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -484,7 +484,7 @@ fun ScanScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 PosBadge(c.pos, Modifier.padding(end = 6.dp))
                                 Text(
-                                    c.meaning.ifBlank { "(뜻 없음 · 탭해서 입력)" },
+                                    c.meaning.ifBlank { "(정답 없음 · 탭해서 입력)" },
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = if (c.meaning.isBlank()) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface,
                                 )
@@ -493,8 +493,8 @@ fun ScanScreen(
                                 if (c.needsCheck) "확인해 주세요" else null,
                                 if (c.original.isNotEmpty()) "스펠링 고침: ${c.original} → ${c.text}" else null,
                                 if (c.rescued) "스펠링을 사진과 비교해 주세요" else null,
-                                c.source.takeIf { it.isNotEmpty() }?.let { "뜻: $it" },
-                                if (c.alreadySaved) "이 단어장에 이미 있어요" else null,
+                                c.source.takeIf { it.isNotEmpty() }?.let { "정답: $it" },
+                                if (c.alreadySaved) "이 문제집에 이미 있어요" else null,
                             )
                             if (notes.isNotEmpty()) {
                                 Text(notes.joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
@@ -510,7 +510,7 @@ fun ScanScreen(
                 if (vm.dropped.isNotEmpty()) {
                     item(key = "dropped") {
                         TextButton(onClick = { showDropped = !showDropped }, modifier = Modifier.padding(horizontal = 8.dp)) {
-                            Text((if (showDropped) "▾ " else "▸ ") + "스펠링이 이상해서 뺀 단어 ${vm.dropped.size}개")
+                            Text((if (showDropped) "▾ " else "▸ ") + "스펠링이 이상해서 뺀 문제 ${vm.dropped.size}개")
                         }
                     }
                     if (showDropped) {
@@ -530,7 +530,7 @@ fun ScanScreen(
                 }
                 item {
                     TextButton(onClick = { showRaw = !showRaw }, modifier = Modifier.padding(8.dp)) {
-                        Text(if (showRaw) "인식 원문 숨기기" else "빠진 단어가 있나요? 인식 원문 보기")
+                        Text(if (showRaw) "인식 원문 숨기기" else "빠진 문제가 있나요? 인식 원문 보기")
                     }
                 }
                 if (showRaw) {
@@ -554,7 +554,7 @@ private val CheckYellow = Color(0x33FFC107)
 private fun PhotoStrip(strip: ImageBitmap, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Image(
         strip,
-        contentDescription = "사진에서 이 단어가 있던 줄",
+        contentDescription = "사진에서 이 문제가 있던 줄",
         contentScale = ContentScale.FillWidth,
         modifier = modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick),
     )
@@ -585,7 +585,7 @@ private fun PhotoMapDialog(start: Int, count: Int, load: suspend (Int) -> ImageB
                     TextButton(onClick = onDismiss) { Text("닫기") }
                 }
                 Text(
-                    "초록 칸 = 찾은 단어, 빨간 칸 = 스펠링이 이상해서 뺀 단어 · 두 손가락으로 크게 볼 수 있어요",
+                    "초록 칸 = 찾은 문제, 빨간 칸 = 스펠링이 이상해서 뺀 문제 · 두 손가락으로 크게 볼 수 있어요",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline,
                 )
@@ -634,15 +634,15 @@ private fun CandidateDialog(c: Candidate, strip: ImageBitmap?, onDismiss: () -> 
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 strip?.let {
-                    Image(it, contentDescription = "사진에서 이 단어가 있던 줄", contentScale = ContentScale.FillWidth, modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)))
+                    Image(it, contentDescription = "사진에서 이 문제가 있던 줄", contentScale = ContentScale.FillWidth, modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)))
                 }
                 OutlinedTextField(text, { text = it }, label = { Text("스펠링") }, singleLine = true)
                 if (c.source.isNotEmpty()) {
-                    Text("지금 뜻: ${c.source}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                    Text("지금 정답: ${c.source}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                 }
-                OutlinedTextField(meaning, { meaning = it }, label = { Text("뜻") }, maxLines = 3)
+                OutlinedTextField(meaning, { meaning = it }, label = { Text("정답") }, maxLines = 3)
                 c.suggestion?.let { s ->
-                    Text("${c.suggestionSource} 뜻", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                    Text("${c.suggestionSource} 정답", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                     SecondaryButton(s, { meaning = s; if (c.suggestionPos.isNotEmpty()) pos = c.suggestionPos })
                 }
             }

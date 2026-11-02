@@ -57,10 +57,10 @@ fun CardEditDialog(
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(text, { text = it }, label = { Text("앞면 (영어 단어)") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(text, { text = it }, label = { Text("앞면 (수학 문제)") }, singleLine = true, modifier = Modifier.weight(1f))
                     PosChips(pos) { pos = it }
                 }
-                OutlinedTextField(meaning, { meaning = it }, label = { Text("뒷면 (뜻) · 비우면 자동 번역") })
+                OutlinedTextField(meaning, { meaning = it }, label = { Text("뒷면 (정답) · 비우면 자동 번역") })
             }
         },
         confirmButton = {

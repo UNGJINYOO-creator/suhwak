@@ -84,6 +84,8 @@ data class Word(
     val level: String = "",
     /** 마클리 문제 은행의 bank_id 같은 원래 출처 (다시 가져올 때 중복 방지). */
     val sourceId: String = "",
+    /** 풀이 화면에서 KaTeX로 그릴 원래 문제 ($...$ 수식). [text]는 목록·리포트용으로 읽기 쉽게 바꾼 글자. */
+    val question: String = "",
 ) {
     val isSeed: Boolean get() = qtype.isNotEmpty()
 }

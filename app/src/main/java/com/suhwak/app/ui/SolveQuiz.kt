@@ -114,7 +114,7 @@ fun SolveQuiz(
         }
 
         MathView(
-            question = word.text,
+            question = word.question.ifBlank { word.text },
             choices = if (mc) choices else emptyList(),
             selected = picked,
             answer = if (stage == 2 && mc) answerIndex else null,
