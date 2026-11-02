@@ -1,0 +1,62 @@
+name: Tablet screenshots
+
+# Run by hand: installs the latest APK on tablet-sized emulator screens and saves screenshots of the main screens.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  shots:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Download latest APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download --pattern Suhwak.apk -R ${{ github.repository }}
+
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: |
+            adb install -g Suhwak.apk
+            adb shell wm size 1080x2340 && adb shell wm density 420 && sleep 3
+            python3 tools/tablet_shots.py shots phone
+            adb shell pm clear com.suhwak.app
+            adb shell wm size 1600x2560 && adb shell wm density 320 && sleep 3
+            python3 tools/tablet_shots.py shots portrait
+            adb shell pm clear com.suhwak.app
+            adb install -r -g Suhwak.apk
+            adb shell wm size 2560x1600 && adb shell wm density 320 && sleep 3
+            python3 tools/tablet_shots.py shots landscape
+            adb shell pm clear com.suhwak.app
+            adb shell wm size 1200x1920 && adb shell wm density 240 && sleep 3
+            python3 tools/tablet_shots.py shots small-tablet
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tablet-shots
+          path: shots
+
+      # Also as a pre-release asset, so the pictures can be fetched without the artifact storage.
+      - name: Publish screenshots
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd shots && zip -q ../tablet-shots.zip *.png && cd ..
+          gh release create tablet-shots-${{ github.run_number }} tablet-shots.zip -R ${{ github.repository }} \
+            --prerelease --latest=false --title "태블릿 화면 점검 ${{ github.run_number }}" --notes "개발용 스크린샷"
