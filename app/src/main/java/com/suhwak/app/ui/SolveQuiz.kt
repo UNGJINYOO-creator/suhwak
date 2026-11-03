@@ -83,7 +83,7 @@ fun SolveQuiz(
     val choices = remember(word.id) { SeedImport.choicesOf(word) }
     val answerIndex = remember(word.id) { if (mc) CIRCLES.indexOf(word.meaning.trim().firstOrNull() ?: ' ') + 1 else 0 }
     val shownAt = remember(word.id) { System.currentTimeMillis() }
-    val label = remember(word.id, number) { SimpleDateFormat("M월 d일", Locale.KOREA).format(Date()) + " · ${number}번" }
+    val label = remember(word.id, number) { SimpleDateFormat("M/d", Locale.KOREA).format(Date()) + " · ${number}번" }
     var stage by remember(word.id) { mutableIntStateOf(0) } // 0 첫 시도, 1 힌트 뒤 다시, 2 끝
     var finalRight by remember(word.id) { mutableStateOf(false) }
     var picked by remember(word.id) { mutableStateOf<Int?>(null) }
@@ -125,7 +125,7 @@ fun SolveQuiz(
             if (word.level.isNotBlank()) Tag(word.level, Color(0xFFF2F9FC), Color(0xFF56657C))
             Spacer(Modifier.weight(1f))
             Text(
-                when (stage) { 0 -> "씨앗"; 1 -> "새싹 · 물 1번"; else -> if (finalRight) "열매!" else "다음엔 꼭 수확" },
+                when { stage == 0 -> "1차"; stage == 1 -> "2차 · 힌트"; missedAtEnd -> "❌ 오답"; else -> "⭕ 정답" },
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
             )
@@ -134,22 +134,20 @@ fun SolveQuiz(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFFFFF8E8)).padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("📒 공책에", color = Color(0xFF6B4A2A), style = MaterialTheme.typography.bodyMedium)
-            Text(" $label ", color = Color(0xFF6B3A10), fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            Text("적고 풀어요", color = Color(0xFF6B4A2A), style = MaterialTheme.typography.bodyMedium)
+            Text("📒 $label", color = Color(0xFF6B3A10), fontWeight = FontWeight.Bold, fontSize = 18.sp)
         }
     }
 
     val feedback: @Composable () -> Unit = {
         when {
             stage == 1 -> Note(
-                "물을 한 번 줬어요. 공책 풀이를 다시 확인해 봐요",
-                word.hint.ifBlank { "문제를 다시 천천히 읽고, 어떤 개념을 쓰는지 떠올려 봐요." },
+                "💡 힌트",
+                word.hint.ifBlank { "문제를 다시 읽어 봐요" },
                 Color(0xFFE6F2FF), Color(0xFF24456F),
             )
-            stage == 2 && finalRight -> Note("수확 성공! 열매가 열렸어요", word.example, Color(0xFFE2F5EF), Color(0xFF24493F))
-            stage == 2 && !missedAtEnd -> Note("힌트를 받고 맞혔어요", word.example, Color(0xFFE2F5EF), Color(0xFF24493F))
-            stage == 2 -> Note("정답은 ${word.meaning} 예요", word.example, Color(0xFFFFF6E5), Color(0xFF6B3A10))
+            stage == 2 && finalRight -> Note("⭕ 정답!", word.example, Color(0xFFE2F5EF), Color(0xFF24493F))
+            stage == 2 && !missedAtEnd -> Note("⭕ 정답! (힌트)", word.example, Color(0xFFE2F5EF), Color(0xFF24493F))
+            stage == 2 -> Note("❌ 정답: ${word.meaning}", word.example, Color(0xFFFFF6E5), Color(0xFF6B3A10))
         }
     }
 
@@ -162,7 +160,7 @@ fun SolveQuiz(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Checkbox(checked = copied, onCheckedChange = { copied = it; notebook.set(word.id, it); onActivity() })
-                Text("공책에 바른 풀이를 옮겨 적었어요", color = Color(0xFF6B3A10), fontWeight = FontWeight.Bold)
+                Text("공책에 옮겨 적었어요", color = Color(0xFF6B3A10), fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -179,21 +177,21 @@ fun SolveQuiz(
                 keyboardActions = KeyboardActions(onDone = { if (response.isNotEmpty() && stage < 2) tryHarvest() }),
                 modifier = Modifier.fillMaxWidth(),
             )
-            if (stage < 2) TextButton(onClick = { useKeyboard = false }) { Text("숫자판으로") }
+            if (stage < 2) TextButton(onClick = { useKeyboard = false }) { Text("숫자판") }
         } else {
             MathKeypad(typed, enabled = stage < 2, onChange = { typed = it; onActivity() })
-            if (stage < 2) TextButton(onClick = { useKeyboard = true }) { Text("글자로 쓰기 (답이 낱말일 때)") }
+            if (stage < 2) TextButton(onClick = { useKeyboard = true }) { Text("글자 입력") }
         }
     }
 
     val action: @Composable () -> Unit = {
         if (stage < 2) {
             Button(onClick = { tryHarvest() }, enabled = response.isNotEmpty(), modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(16.dp)) {
-                Text("수확하기", fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                Text("채점하기", fontSize = 19.sp, fontWeight = FontWeight.Bold)
             }
         } else {
             Button(onClick = onNext, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(16.dp)) {
-                Text("다음 씨앗", fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                Text("다음 문제", fontSize = 19.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -215,7 +213,7 @@ fun SolveQuiz(
                     Modifier.weight(0.85f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Text(if (mc) "답을 고르세요" else "답을 입력하세요", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(if (mc) "답 고르기" else "답 쓰기", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     if (mc) {
                         MathView(
                             question = "",
@@ -258,10 +256,10 @@ fun SolveQuiz(
     if (askFast) {
         AlertDialog(
             onDismissRequest = { askFast = false },
-            title = { Text("벌써 답을 냈어요") },
-            text = { Text("공책에 풀었나요? 10초 안에 낸 답은 맞혀도 열매로 세지 않아요.") },
-            confirmButton = { TextButton(onClick = { askFast = false; harvest() }) { Text("네, 낼게요") } },
-            dismissButton = { TextButton(onClick = { askFast = false }) { Text("공책에 풀어볼게요") } },
+            title = { Text("공책에 풀었나요?") },
+            text = { Text("너무 빨리 내면 열매를 못 받아요.") },
+            confirmButton = { TextButton(onClick = { askFast = false; harvest() }) { Text("낼게요") } },
+            dismissButton = { TextButton(onClick = { askFast = false }) { Text("다시 풀게요") } },
         )
     }
 }
@@ -282,7 +280,7 @@ private fun MathKeypad(value: String, enabled: Boolean, onChange: (String) -> Un
                 .border(1.5.dp, Color(0xFFE1EAF4), RoundedCornerShape(14.dp)).padding(horizontal = 16.dp),
             contentAlignment = Alignment.CenterStart,
         ) {
-            if (value.isEmpty()) Text("숫자판으로 답을 입력해요 (예: 3/8, x=4, y=2)", color = Color(0xFF8A97AB))
+            if (value.isEmpty()) Text("답 (예: 3/8, x=4)", color = Color(0xFF8A97AB))
             else Text(value, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2B3A4F))
         }
         rows.forEach { row ->
@@ -345,7 +343,7 @@ private fun ClozeBox(steps: List<String>, onActivity: () -> Unit) {
         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xFFF7FAFC)).padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text("풀이를 따라가며 빈칸을 채워 볼까요?", fontWeight = FontWeight.Bold, color = Color(0xFF2B3A4F))
+        Text("빈칸 풀이", fontWeight = FontWeight.Bold, color = Color(0xFF2B3A4F))
         cloze.lines.forEach { pieces ->
             FlowRow(verticalArrangement = Arrangement.Center, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 pieces.forEach { piece ->
@@ -370,10 +368,10 @@ private fun ClozeBox(steps: List<String>, onActivity: () -> Unit) {
             }
         }
         if (!checked) {
-            OutlinedButton(onClick = { onActivity(); checked = true }, modifier = Modifier.fillMaxWidth()) { Text("빈칸 확인하기") }
+            OutlinedButton(onClick = { onActivity(); checked = true }, modifier = Modifier.fillMaxWidth()) { Text("확인") }
         } else {
             val n = cloze.answers.indices.count { MathGrade.short(cloze.answers[it], typed[it]) }
-            Text("빈칸 ${cloze.answers.size}개 중 ${n}개 맞혔어요", fontWeight = FontWeight.Bold, color = Color(0xFF2B6B5F))
+            Text("빈칸 ${n}/${cloze.answers.size} 정답", fontWeight = FontWeight.Bold, color = Color(0xFF2B6B5F))
         }
     }
 }

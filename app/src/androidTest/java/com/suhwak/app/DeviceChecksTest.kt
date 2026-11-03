@@ -91,7 +91,7 @@ class DeviceChecksTest {
     @Test fun eveningReportBuildsAndNeedsTelegram() = runBlocking {
         EveningReport.add(context, "🎣 낚시: 테스트 물고기")
         val text = EveningReport.build(context)
-        assertTrue(text.startsWith("🌙 낚아보카 저녁 리포트"))
+        assertTrue(text.startsWith("🌙 수확중 저녁 리포트"))
         assertTrue(text.contains("🎣 낚시: 테스트 물고기"))
         val settings = StudySettings(context)
         settings.telegramToken = ""

@@ -115,7 +115,7 @@ object EveningReport {
         )
 
         return buildString {
-            append("🌙 낚아보카 저녁 리포트 · ${SimpleDateFormat("M월 d일 (E)", Locale.KOREA).format(Date())}\n\n")
+            append("🌙 수확중 저녁 리포트 · ${SimpleDateFormat("M월 d일 (E)", Locale.KOREA).format(Date())}\n\n")
             if (missing != null) append("⏰ 아직 오늘 목표까지 $missing 남았어요\n")
             append("👍 ${good.joinToString(" · ").ifEmpty { "오늘은 아직 공부 기록이 없어요" }}\n")
             append("⚠️ ${worry.joinToString(" · ").ifEmpty { "특별히 약한 부분은 없어요" }}\n")

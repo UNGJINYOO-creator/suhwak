@@ -166,6 +166,8 @@ fun DeckScreen(
     val active = words.filter { !it.excluded }
     val unknownCount = active.count { !it.known }
     val studyCount = active.count { !it.mastered }.takeIf { it > 0 } ?: active.size
+    /** 수확중 씨앗(수학 문제)만 든 문제집: 학습 방식 고르기·짝 맞추기·사진 추가를 숨긴다. */
+    val seedDeck = active.isNotEmpty() && active.all { it.isSeed }
 
     var showAdd by rememberSaveable { mutableStateOf(false) }
     var showManual by rememberSaveable { mutableStateOf(false) }
@@ -272,16 +274,17 @@ fun DeckScreen(
             item {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
                     Text(
-                        "문제 ${words.size}개 · 외웠어요 ${active.count { it.mastered }}개 · 모르는 것 ${unknownCount}개",
+                        if (seedDeck) "문제 ${words.size}개 · 익힘 ${active.count { it.known }}개 · 아직 ${unknownCount}개"
+                        else "문제 ${words.size}개 · 외웠어요 ${active.count { it.mastered }}개 · 모르는 것 ${unknownCount}개",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.outline,
                     )
                     Spacer(Modifier.height(12.dp))
-                    PrimaryButton("학습 시작", { showStudy = true }, enabled = active.isNotEmpty())
+                    PrimaryButton(if (seedDeck) "풀기 시작" else "학습 시작", { showStudy = true }, enabled = active.isNotEmpty())
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         SecondaryButton("📝 시험 (${minOf(active.size, vm.settings.testSize)}문제)", { onTest(vm.deckId) }, Modifier.weight(1f), enabled = active.size >= 4)
-                        SecondaryButton("🧩 짝 맞추기", { onMatch(vm.deckId) }, Modifier.weight(1f), enabled = active.size >= 2)
+                        if (!seedDeck) SecondaryButton("🧩 짝 맞추기", { onMatch(vm.deckId) }, Modifier.weight(1f), enabled = active.size >= 2)
                     }
                     Spacer(Modifier.height(12.dp))
                     Row(Modifier.horizontalScroll(rememberScrollState())) {
@@ -308,7 +311,7 @@ fun DeckScreen(
             if (words.isEmpty()) {
                 item {
                     Text(
-                        "카드가 없어요. 아래 '문제 추가'로 사진을 찍거나 직접 입력해 보세요.",
+                        "문제가 없어요. 홈의 ＋에서 마클리 씨앗을 가져오거나 아래 '문제 추가'로 직접 입력해 보세요.",
                         modifier = Modifier.padding(24.dp),
                         style = MaterialTheme.typography.bodyMedium,
                     )
@@ -337,17 +340,7 @@ fun DeckScreen(
         ModalBottomSheet(onDismissRequest = { showAdd = false }, containerColor = MaterialTheme.colorScheme.surface) {
             Column(Modifier.navigationBarsPadding().padding(bottom = 16.dp)) {
                 Text("문제 추가", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
-                SheetItem(Icons.Default.CameraAlt, "사진 찍기", "찍은 사진에서 문제를 찾아 이 문제집에 넣어요") {
-                    showAdd = false
-                    val uri = newPhotoUri(context)
-                    pendingUri = uri.toString()
-                    takePicture.launch(uri)
-                }
-                SheetItem(Icons.Default.PhotoLibrary, "앨범에서 고르기", "사진이나 스크린샷, 여러 장 한 번에 골라도 돼요") {
-                    showAdd = false
-                    pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                }
-                SheetItem(Icons.Default.Keyboard, "직접 입력", "문제와 정답을 손으로 적어요 (정답을 비우면 자동 번역)") {
+                SheetItem(Icons.Default.Keyboard, "직접 입력", "문제와 정답을 직접 적어요") {
                     showAdd = false
                     showManual = true
                 }
@@ -361,6 +354,7 @@ fun DeckScreen(
             starred = active.count { it.bookmarked },
             initialModes = vm.settings.modes,
             initialStaged = vm.settings.staged,
+            seeds = seedDeck,
             onDismiss = { showStudy = false },
             onStart = { scope, modes, staged ->
                 showStudy = false
@@ -515,6 +509,7 @@ private fun StudySheet(
     starred: Int,
     initialModes: List<StudyMode>,
     initialStaged: Boolean,
+    seeds: Boolean = false,
     onDismiss: () -> Unit,
     onStart: (scope: StudyScope, modes: List<StudyMode>, staged: Boolean) -> Unit,
 ) {
@@ -523,22 +518,24 @@ private fun StudySheet(
     var staged by remember { mutableStateOf(initialStaged) }
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface) {
         Column(Modifier.navigationBarsPadding().padding(bottom = 16.dp).verticalScroll(rememberScrollState())) {
-            Text("어떻게 학습할까요?", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+            Text(if (seeds) "어떤 문제를 풀까요?" else "어떻게 학습할까요?", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
             Row(Modifier.padding(horizontal = 24.dp, vertical = 4.dp)) {
                 FilterChip(selected = scope == StudyScope.ALL, onClick = { scope = StudyScope.ALL }, label = { Text("전체 ${total}개") }, modifier = Modifier.padding(end = 8.dp))
-                FilterChip(selected = scope == StudyScope.UNKNOWN, onClick = { scope = StudyScope.UNKNOWN }, label = { Text("모르는 것만 ${unknown}개") }, enabled = unknown > 0, modifier = Modifier.padding(end = 8.dp))
+                FilterChip(selected = scope == StudyScope.UNKNOWN, onClick = { scope = StudyScope.UNKNOWN }, label = { Text(if (seeds) "아직 못 맞힌 것 ${unknown}개" else "모르는 것만 ${unknown}개") }, enabled = unknown > 0, modifier = Modifier.padding(end = 8.dp))
                 if (starred > 0) {
                     FilterChip(selected = scope == StudyScope.STARRED, onClick = { scope = StudyScope.STARRED }, label = { Text("⭐ 별표만 ${starred}개") })
                 }
             }
-            Text(
-                "처음엔 설정에 저장된 순서가 들어 있어요. 이번 학습만 바꿔도 돼요",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.outline,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
-            )
-            ModePicker(modes, staged) { m, st -> modes = m; staged = st }
-            PrimaryButton("학습 시작", { onStart(scope, modes, staged) }, Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+            if (!seeds) {
+                Text(
+                    "처음엔 설정에 저장된 순서가 들어 있어요. 이번 학습만 바꿔도 돼요",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
+                )
+                ModePicker(modes, staged) { m, st -> modes = m; staged = st }
+            }
+            PrimaryButton(if (seeds) "풀기 시작" else "학습 시작", { onStart(scope, modes, staged) }, Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
         }
     }
 }

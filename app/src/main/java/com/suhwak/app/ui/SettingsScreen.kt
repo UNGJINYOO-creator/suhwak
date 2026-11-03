@@ -186,21 +186,13 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                     .padding(16.dp),
             ) {
                 Text("➕ 문제 추가", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("사진·스크린샷으로 문제를 넣거나 문제집을 만들어요", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SecondaryButton("📷 사진 찍기", { onAdd(AddKind.CAMERA) }, Modifier.weight(1f))
-                    SecondaryButton("🖼 앨범에서", { onAdd(AddKind.ALBUM) }, Modifier.weight(1f))
-                }
+                Text("문제집을 만들거나 여러 문제집을 묶어요. 마클리 씨앗은 홈의 ＋에서 가져와요", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     SecondaryButton("📒 빈 문제집", { onAdd(AddKind.DECK) }, Modifier.weight(1f))
                     SecondaryButton("📚 종합 문제집", { onAdd(AddKind.COLLECTION) }, Modifier.weight(1f))
                 }
-                Spacer(Modifier.height(8.dp))
-                var showCheck by remember { mutableStateOf(false) }
-                if (showCheck) DeckCheckDialog(null, onDismiss = { showCheck = false })
-                SecondaryButton("🔍 전체 문제집 점검 (오타·정답)", { showCheck = true }, Modifier.fillMaxWidth())
+
             }
             Text(
                 "아래 항목을 누르면 펼쳐져요. 바꾸면 바로 반영돼요. 다 고친 뒤 아래 💾 설정 저장을 누르면 연결된 다른 기기에도 보내요.",
@@ -247,7 +239,7 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                     open == "goal", { toggle("goal") },
                 ) {
                     Body {
-                        Labeled("하루 외울 문제", "객관식·빈칸·듣고 쓰기에서 맞힌 문제만 세요. 오늘 학습에 새 문제도 이만큼 나와요.") {
+                        Labeled("하루 맞힐 문제", "오늘 처음 맞힌 문제를 세요. 새 문제도 이만큼 나와요.") {
                             NumberChoice(dailyWords, Opt.dailyWords, "개", 300, min = 0) { dailyWords = it; settings.dailyWords = it }
                         }
                         Labeled("하루 최소 학습 시간", "채우면 오늘 목표 달성, 텔레그램으로 결과가 가요") {
@@ -261,32 +253,15 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                     }
                 }
                 Group(
-                    "📚 학습 방법",
-                    modes.joinToString(" → ") { it.label } + " · " + (if (size > 0) "${size}장씩" else "전부"),
+                    "📚 풀기",
+                    (if (size > 0) "한 번에 ${size}문제" else "한 번에 전부") + " · 시험 ${testSize}문제",
                     open == "study", { toggle("study") },
                 ) {
                     Body {
-                        Text("학습 순서", style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            "켜 둔 단계가 위에서부터 순서대로 진행돼요. ▲▼로 순서를 바꿀 수 있어요",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.outline,
-                        )
-                    }
-                    ModePicker(modes, staged) { m, st ->
-                        modes = m; staged = st; settings.modes = m; settings.staged = st
-                    }
-                    Body {
-                        Labeled("빈칸 난이도", "자동은 잘 외운 문제일수록 빈칸이 늘어나요") {
-                            Choice(blank, BlankLevel.entries.map { it to it.label }) { blank = it; settings.blankLevel = it }
-                        }
-                        if (StudyMode.DICTATION in modes) {
-                            Labeled("듣고 쓰기에서 '패스'를 누르면 빈칸으로", "소리가 꺼져 있으면 듣고 쓰기는 자동으로 빈칸 문제로 바뀌어요") {
-                                Choice(pass, DictationPass.entries.map { it to it.label }) { pass = it; settings.dictationPass = it }
-                            }
-                        }
-                        Labeled("한 번에 학습할 카드") {
-                            NumberChoice(size, Opt.session, "장", 999, min = 0) { size = it; settings.sessionSize = it }
+                        // 수확중: 낚아보카의 학습 방식 고르기(카드·4지선다·스펠링·듣고 쓰기)·빈칸 난이도·듣고 쓰기 패스는
+                        // 수학 문제에 쓰이지 않아 숨긴다. 씨앗은 언제나 '수학 풀기'로 나온다.
+                        Labeled("한 번에 풀 문제") {
+                            NumberChoice(size, Opt.session, "문제", 999, min = 0) { size = it; settings.sessionSize = it }
                         }
                         Labeled("시험 문제 수") {
                             NumberChoice(testSize, Opt.test, "문제", 200) { testSize = it; settings.testSize = it }
@@ -294,21 +269,15 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                     }
                 }
                 Group(
-                    "🃏 카드와 소리",
+                    "🔊 순서와 소리",
                     listOf(
-                        if (shuffle) "섞기" else "알파벳 순",
-                        "글자 " + (Opt.textScale.firstOrNull { it.first == textScale }?.second ?: "보통"),
-                        if (autoSpeak) "발음 켬" else "발음 끔",
+                        if (shuffle) "섞기" else "순서대로",
+                        if (soundEffects) "효과음 켬" else "효과음 끔",
                     ).joinToString(" · "),
                     open == "card", { toggle("card") },
                 ) {
                     Body {
-                        SwitchRow("카드 섞기", "학습할 때마다 순서를 무작위로 (끄면 알파벳 순)", shuffle) { shuffle = it; settings.shuffle = it }
-                        SwitchRow("뒷면 먼저", "정답을 먼저 보고 수학 문제 떠올리기", backFirst) { backFirst = it; settings.backFirst = it }
-                        Labeled("글자 크기") {
-                            Choice(textScale, Opt.textScale) { textScale = it; settings.textScale = it }
-                        }
-                        SwitchRow("발음 자동 재생", "카드가 나올 때마다 발음을 들려줘요", autoSpeak) { autoSpeak = it; settings.autoSpeak = it }
+                        SwitchRow("문제 섞기", "풀 때마다 순서를 무작위로", shuffle) { shuffle = it; settings.shuffle = it }
                         SwitchRow("효과음", "콤보·레벨 업 때 소리를 내요", soundEffects) { soundEffects = it; settings.soundEffects = it }
                         if (soundEffects) {
                             Labeled("콤보 소리 (누르면 들어 봐요)") {

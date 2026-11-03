@@ -278,7 +278,7 @@ fun TelegramEditor(settings: StudySettings) {
         TextButton(onClick = {
             scope.launch {
                 status = "보내는 중…"
-                val error = Telegram.send(token, chatId, "✅ 수확중와 연결됐어요! 매일 저녁 여기로 학습 리포트를 보내드릴게요.")
+                val error = Telegram.send(token, chatId, "✅ 수확중과 연결됐어요! 매일 저녁 여기로 학습 리포트를 보내드릴게요.")
                 status = error ?: "테스트 메시지를 보냈어요. 텔레그램을 확인하세요"
             }
         }, enabled = token.isNotBlank() && chatId.isNotBlank()) { Text("📨 테스트 보내기") }

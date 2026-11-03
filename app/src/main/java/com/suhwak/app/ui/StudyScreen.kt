@@ -413,7 +413,7 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
                 celebrate("${combo}콤보! 🔥" + if (caught) " 🍎+1" else "", sound = false)
                 if (settings.soundEffects) sfx.combo(settings.comboSound, combo)
             }
-            caught -> celebrate("🍎 하나 수확했어요!", sound = false)
+            caught -> celebrate("🍎 +1", sound = false)
         }
         // Without a daily goal, the first right answer of the day earns the stamp.
         if (goalMs <= 0) stamp()
@@ -678,7 +678,7 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
             // 수확중 찍기 방지: 공책에 풀 시간도 없이(10초 안) 낸 답은 맞혀도 열매로 세지 않는다
             (mode == StudyMode.SOLVE && answerMs in 1 until SOLVE_FAST_MS)
         if (guessed && answer != Answer.UNKNOWN) {
-            celebrate(if (mode == StudyMode.SOLVE) "너무 빨리 냈어요. 공책에 풀고 내면 열매가 열려요 🙂" else "너무 빨라요! 정답을 읽고 골라요 🙂", sound = false)
+            celebrate(if (mode == StudyMode.SOLVE) "너무 빨라요! 공책에 풀고 내요" else "너무 빨라요! 정답을 읽고 골라요 🙂", sound = false)
         }
         if (mode != StudyMode.CARD) {
             answerLog.add(
@@ -697,7 +697,7 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
         }
         if (mode != StudyMode.CARD && !guessed) {
             when (wrongNote.record(word.id, answer != Answer.UNKNOWN)) {
-                1 -> celebrate("🔥 오답노트에 넣었어요", sound = false)
+                1 -> celebrate("📒 오답노트에 추가", sound = false)
                 -1 -> celebrate("오답노트 졸업! 👏")
             }
             stats.recordAnswer(word.text, answer != Answer.UNKNOWN)
@@ -1337,11 +1337,10 @@ private fun StudyTimer(vm: StudyViewModel) {
                     )
                     if (vm.goalWords > 0) {
                         Text(
-                            "🧠 ${vm.learnedToday}/${vm.goalWords}\n오늘 외운 문제 / 하루 목표예요. " +
-                                "객관식·빈칸·듣고 쓰기에서 맞힌 문제만 세요. 정답 카드 넘기기는 안 세요.",
+                            "🧠 ${vm.learnedToday}/${vm.goalWords}\n오늘 처음 맞힌 문제 / 하루 목표예요.",
                         )
                     }
-                    Text("제목의 ${vm.doneCount}/${vm.sessionSize}\n이번 학습에서 끝낸 카드 / 전체 카드예요.")
+                    Text("제목의 ${vm.doneCount}/${vm.sessionSize}\n이번에 끝낸 문제 / 전체 문제예요.")
                 }
             },
             confirmButton = { TextButton(onClick = { help = false }) { Text("알겠어요") } },
@@ -1382,7 +1381,7 @@ private fun Summary(vm: StudyViewModel, onBack: () -> Unit) {
         )
         if (vm.goalWords > 0) {
             Text(
-                "오늘 외운 문제 ${vm.learnedToday}/${vm.goalWords}" +
+                "오늘 맞힌 문제 ${vm.learnedToday}/${vm.goalWords}" +
                     if (vm.learnedToday >= vm.goalWords) " · 목표 달성 🎉" else " · ${vm.goalWords - vm.learnedToday}개 남았어요",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.primary,
@@ -1390,13 +1389,13 @@ private fun Summary(vm: StudyViewModel, onBack: () -> Unit) {
         }
         Spacer(Modifier.height(8.dp))
         Text(
-            "${vm.sessionSize}개 중 처음에 바로 맞힌 카드 ${vm.firstTryKnown}개 (외웠어요 ${vm.masteredCount}개) · 틀린 카드 ${vm.everMissed.size}개",
+            "${vm.sessionSize}문제 · 한 번에 맞힘 ${vm.firstTryKnown} · 틀림 ${vm.everMissed.size}",
             style = MaterialTheme.typography.bodyLarge,
         )
         if (vm.sessionStars > 0) {
             Spacer(Modifier.height(8.dp))
             Text(
-                "🍎 문제 열매 ${vm.sessionStars}개 수확했어요 · 최고 ${vm.bestCombo}콤보",
+                "🍎 열매 ${vm.sessionStars}개 · 최고 ${vm.bestCombo}콤보",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.primary,
             )

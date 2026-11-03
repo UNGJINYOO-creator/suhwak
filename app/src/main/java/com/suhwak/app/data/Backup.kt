@@ -20,7 +20,7 @@ import java.util.zip.ZipOutputStream
 object Backup {
     private const val DB = "suhwak.db"
 
-    fun fileName(): String = "낚아보카_백업_${SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())}.zip"
+    fun fileName(): String = "수확중_백업_${SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())}.zip"
 
     private fun roots(context: Context): Map<String, File> {
         val data = context.applicationContext.filesDir.parentFile!!
@@ -62,7 +62,7 @@ object Backup {
                 if (!e.isDirectory) entries += e.name to zip.readBytes()
             }
         }
-        if (entries.none { it.first == "databases/$DB" }) error("낚아보카 백업 파일이 아니에요")
+        if (entries.none { it.first == "databases/$DB" }) error("수확중 백업 파일이 아니에요")
         AppDatabase.close()
         val roots = roots(context)
         roots.getValue("databases").listFiles()?.filter { it.name.startsWith(DB) }?.forEach { it.delete() }
@@ -93,7 +93,7 @@ object Backup {
         val settings = StudySettings(context)
         return Telegram.sendDocument(
             settings.telegramToken, settings.telegramChatId, fileName(), toBytes(context),
-            "💾 낚아보카 백업이에요. 새 휴대폰에서는 이 파일을 받아 설정 > 백업 > 불러오기를 누르세요.",
+            "💾 수확중 백업이에요. 새 휴대폰에서는 이 파일을 받아 설정 > 백업 > 불러오기를 누르세요.",
         )
     }
 }

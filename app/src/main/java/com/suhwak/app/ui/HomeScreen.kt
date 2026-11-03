@@ -360,23 +360,18 @@ private fun LevelDialog(level: Int, known: Int, total: Int, stars: Int, totalMs:
         },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("📊 지금까지 ${hoursText(totalMs)} 공부했고, 전체 문제 ${total}개 중 ${known}개($percent%)를 외웠어요.", style = MaterialTheme.typography.bodyMedium)
+                Text("📊 지금까지 ${hoursText(totalMs)} 공부했고, 전체 문제 ${total}개 중 ${known}개($percent%)를 익혔어요.", style = MaterialTheme.typography.bodyMedium)
                 Spacer(Modifier.height(4.dp))
                 Text("🍎 수확한 열매는 뭐예요?", style = MaterialTheme.typography.titleSmall)
                 Text(
-                    "문제 하나를 외우면(객관식·빈칸·듣고 쓰기에서 그날 처음 맞히면) 열매 하나를 수확해요. " +
-                        "7일 연속 출석하면 🏅 배지와 선물 열매 20개! 수확한 열매는 복습·통계 탭에서 부모님이 정한 보상 쿠폰으로 바꿀 수 있어요. " +
-                        "지금 가진 열매는 ${stars}개예요.",
+                    "문제를 그날 처음 맞히면 열매 1개, 7일 연속 출석하면 +20개. 열매는 보상 쿠폰으로 바꿔요. " +
+                        "지금 가진 열매: ${stars}개",
                     style = MaterialTheme.typography.bodySmall,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text("🏆 레벨", style = MaterialTheme.typography.titleSmall)
                 Text(
-                    "앱에 있는 전체 문제 중 몇 %를 외웠는지로 등급이 정해져요. 0%면 Lv.1, 모든 문제를 외워 100%가 되면 최고 등급 Lv.7이에요. " +
-                        "외운 문제는 서로 다른 두 날에 문제를 맞힌 문제예요. 하루 반짝 맞힌 건 아직 안 쳐요. " +
-                        "등급 안에서는 ★ 세 칸이 차오르고, 레벨이 오르면 선물 열매(레벨×10개)를 받아요. " +
-                        "문제를 새로 추가해 %가 내려가도 한 번 오른 등급은 내려가지 않아요. " +
-                        "레벨이 오르면 칭호가 바뀌고 문제집 표지에 쓸 새 이모지가 열려요.",
+                    "맞힌 문제가 늘수록 레벨이 올라요 (Lv.1~7).",
                     style = MaterialTheme.typography.bodySmall,
                 )
                 (1..Levels.titles.size).forEach { n ->
@@ -840,14 +835,14 @@ private fun HomeHeader(level: Int, known: Int, total: Int, stars: Int, totalMs: 
         Column(Modifier.align(Alignment.TopStart).padding(top = 6.dp)) {
             Text(
                 buildAnnotatedString {
-                    append("수확해")
-                    withStyle(SpanStyle(color = com.suhwak.app.ui.theme.Sea.Mint)) { append("보카") }
+                    append("수확")
+                    withStyle(SpanStyle(color = com.suhwak.app.ui.theme.Sea.Mint)) { append("중") }
                 },
                 color = com.suhwak.app.ui.theme.Sea.Accent,
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Black,
             )
-            Text("오늘도 문제\n수확하러 가볼까? 🍎", color = com.suhwak.app.ui.theme.Sea.Soft, style = MaterialTheme.typography.bodyMedium)
+            Text("오늘도 수확해 볼까? 🍎", color = com.suhwak.app.ui.theme.Sea.Soft, style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(10.dp))
             // Who the child is: the level badge (today's numbers live in the card below). Tap for the level popup.
             Column(
@@ -973,15 +968,14 @@ private fun TodayCard(
                 Spacer(Modifier.height(12.dp))
                 Row(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable {
-                        info = "🧠 오늘 외운 문제" to (
-                            "오늘 객관식·빈칸·듣고 쓰기 문제에서 맞힌 서로 다른 문제 수예요. 정답 카드 넘기기는 세지 않아요.\n\n" +
-                                "하루 목표는 ${goalWords}개예요. 목표를 채우면 🧺 오늘의 수확가 열리고, " +
-                                "외운 한 문제마다 열매 하나를 수확해요."
+                        info = "🧠 오늘 맞힌 문제" to (
+                            "오늘 처음 맞힌 문제 수예요.\n\n" +
+                                "하루 목표는 ${goalWords}개예요. 목표를 채우면 🧺 오늘의 수확이 열려요."
                             )
                     },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("🧠 오늘 외운 문제", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                    Text("🧠 오늘 맞힌 문제", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.weight(1f))
                     Text(
                         if (learned >= goalWords) "$learned / $goalWords 달성 🎉" else "$learned / $goalWords",
