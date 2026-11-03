@@ -675,9 +675,11 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
         // Card swipes are the child's own word, so only quiz answers count for stars and the right rate.
         // A 객관식 answer picked faster than the 찍기 limit (설정, default 1초) is a guess: no stars, no goal, no right rate.
         val guessed = (mode == StudyMode.CHOICE && answerMs in 1 until settings.guessMs) ||
-            // 수확중 찍기 방지: 객관식 씨앗을 3초 안에 고르면 문제를 안 읽은 것으로 본다
-            (mode == StudyMode.SOLVE && word.qtype == "mc" && answerMs in 1 until 3000)
-        if (guessed && answer != Answer.UNKNOWN) celebrate("너무 빨라요! 정답을 읽고 골라요 🙂", sound = false)
+            // 수확중 찍기 방지: 공책에 풀 시간도 없이(10초 안) 낸 답은 맞혀도 열매로 세지 않는다
+            (mode == StudyMode.SOLVE && answerMs in 1 until SOLVE_FAST_MS)
+        if (guessed && answer != Answer.UNKNOWN) {
+            celebrate(if (mode == StudyMode.SOLVE) "너무 빨리 냈어요. 공책에 풀고 내면 열매가 열려요 🙂" else "너무 빨라요! 정답을 읽고 골라요 🙂", sound = false)
+        }
         if (mode != StudyMode.CARD) {
             answerLog.add(
                 AnswerEntry(
@@ -995,6 +997,7 @@ fun StudyScreen(
                             when (vm.mode) {
                                 StudyMode.SOLVE -> SolveQuiz(
                                     word = word,
+                                    number = vm.doneCount + 1,
                                     onAnswered = vm::solveAnswered,
                                     onNext = vm::next,
                                     onActivity = vm::touch,

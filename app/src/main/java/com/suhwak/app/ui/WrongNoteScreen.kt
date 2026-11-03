@@ -40,10 +40,11 @@ import kotlinx.coroutines.launch
 class WrongNoteViewModel(app: Application) : AndroidViewModel(app) {
     private val dao = AppDatabase.get(app).wordDao()
     private val note = WrongNote(app)
+    private val notebook = com.suhwak.app.data.NotebookCopy(app)
     val settings = StudySettings(app)
 
     /** A word in the note, with how often it was missed and how far it is from leaving. */
-    data class Row(val word: Word, val deck: String, val misses: Int, val streak: Int)
+    data class Row(val word: Word, val deck: String, val misses: Int, val streak: Int, val copied: Boolean = false)
 
     var rows by mutableStateOf<List<Row>?>(null)
         private set
@@ -52,8 +53,15 @@ class WrongNoteViewModel(app: Application) : AndroidViewModel(app) {
         val entries = note.entries
         val decks = dao.getAllDecks().associate { it.id to it.name }
         rows = dao.getAllWords().filter { it.id in entries && !it.excluded }
-            .map { w -> entries.getValue(w.id).let { (m, s) -> Row(w, decks[w.deckId] ?: "", m, s) } }
+            .map { w -> entries.getValue(w.id).let { (m, s) -> Row(w, decks[w.deckId] ?: "", m, s, notebook.isCopied(w.id)) } }
             .sortedWith(compareByDescending<Row> { it.misses }.thenBy { it.word.text.lowercase() })
+    }
+
+    /** 📒 공책에 바른 풀이를 옮겨 적었는지 (아이가 직접 체크). */
+    fun toggleCopied(w: Word) {
+        val now = !notebook.isCopied(w.id)
+        notebook.set(w.id, now)
+        rows = rows?.map { if (it.word.id == w.id) it.copy(copied = now) else it }
     }
 
     fun toggleBookmark(w: Word) = viewModelScope.launch {
@@ -81,7 +89,7 @@ fun WrongNoteScreen(onBack: () -> Unit, onStudy: () -> Unit, vm: WrongNoteViewMo
         if (rows == null) return@Scaffold
         Column(Modifier.fillMaxSize().padding(padding)) {
             Text(
-                "퀴즈에서 2번 틀린 문제가 모여요. 연속 ${WrongNote.CLEAR_STREAK}번 맞히면 빠져요.",
+                "2번 틀린 문제가 모여요. 바른 풀이를 공책에 옮겨 적고, 연속 ${WrongNote.CLEAR_STREAK}번 맞히면 빠져요.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.outline,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
@@ -115,6 +123,13 @@ fun WrongNoteScreen(onBack: () -> Unit, onStudy: () -> Unit, vm: WrongNoteViewMo
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.outline,
                                 )
+                                if (w.isSeed) {
+                                    androidx.compose.material3.FilterChip(
+                                        selected = r.copied,
+                                        onClick = { vm.toggleCopied(w) },
+                                        label = { Text(if (r.copied) "📒 공책에 옮겨 적었어요" else "📒 공책에 옮겨 적기") },
+                                    )
+                                }
                             }
                         },
                         trailingContent = { StarButton(w.bookmarked) { vm.toggleBookmark(w) } },

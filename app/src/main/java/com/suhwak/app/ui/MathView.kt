@@ -103,7 +103,7 @@ html,body{margin:0;padding:0;background:transparent;color:#2B3A4F;font-family:sa
 .c.ans{background:#E2F5EF;border-color:#3FA79C}.c.ans .mk{color:#2B6B5F;font-weight:700}
 .c.bad{background:#FDECEC;border-color:#E5534B}
 </style></head><body>
-<div class="q" id="q">${esc(big(question))}</div>
+${if (question.isBlank()) "" else "<div class=\"q\" id=\"q\">" + esc(big(question)) + "</div>"}
 <div class="cs">$buttons</div>
 <script>
 var L=0;
