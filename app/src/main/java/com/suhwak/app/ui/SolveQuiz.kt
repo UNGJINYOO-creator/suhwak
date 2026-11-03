@@ -121,6 +121,13 @@ fun SolveQuiz(
 
     val header: @Composable () -> Unit = {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "📒 $label",
+                color = Color(0xFF6B3A10),
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(Color(0xFFFFF3D6)).padding(horizontal = 8.dp, vertical = 3.dp),
+            )
             if (word.pos.isNotBlank()) Tag(word.pos, Color(0xFFE2F5EF), Color(0xFF24493F))
             if (word.level.isNotBlank()) Tag(word.level, Color(0xFFF2F9FC), Color(0xFF56657C))
             Spacer(Modifier.weight(1f))
@@ -129,12 +136,6 @@ fun SolveQuiz(
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
             )
-        }
-        Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFFFFF8E8)).padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text("📒 $label", color = Color(0xFF6B3A10), fontWeight = FontWeight.Bold, fontSize = 18.sp)
         }
     }
 
@@ -198,7 +199,7 @@ fun SolveQuiz(
 
     BoxWithConstraints(modifier) {
         if (maxWidth >= 700.dp) {
-            // 태블릿: 왼쪽 문제, 오른쪽 답
+            // 태블릿: 왼쪽 문제, 오른쪽 답 (채점하기는 오른쪽 아래에 고정)
             Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
                 Column(
                     Modifier.weight(1.15f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 4.dp),
@@ -209,46 +210,43 @@ fun SolveQuiz(
                     feedback()
                     wrongPart()
                 }
-                Column(
-                    Modifier.weight(0.85f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Text(if (mc) "답 고르기" else "답 쓰기", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    if (mc) {
-                        MathView(
-                            question = "",
-                            choices = choices,
-                            selected = picked,
-                            answer = if (stage == 2) answerIndex else null,
-                            locked = stage == 2,
-                            onPick = { i -> onActivity(); picked = i },
-                        )
-                    } else {
-                        shortInput()
+                Column(Modifier.weight(0.85f).fillMaxHeight().padding(horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(if (mc) "답 고르기" else "답 쓰기", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        if (mc) {
+                            MathView(
+                                question = "",
+                                choices = choices,
+                                selected = picked,
+                                answer = if (stage == 2) answerIndex else null,
+                                locked = stage == 2,
+                                onPick = { i -> onActivity(); picked = i },
+                            )
+                        } else {
+                            shortInput()
+                        }
                     }
                     action()
                 }
             }
         } else {
-            // 휴대폰: 위 문제, 아래 답
-            Column(
-                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                header()
-                MathView(
-                    question = word.question.ifBlank { word.text },
-                    choices = if (mc) choices else emptyList(),
-                    selected = picked,
-                    answer = if (stage == 2 && mc) answerIndex else null,
-                    locked = stage == 2,
-                    onPick = { i -> onActivity(); picked = i },
-                )
-                feedback()
-                if (!mc) shortInput()
+            // 휴대폰: 위 문제, 아래 답. 채점하기는 화면 맨 아래에 고정
+            Column(Modifier.fillMaxSize().padding(horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    header()
+                    MathView(
+                        question = word.question.ifBlank { word.text },
+                        choices = if (mc) choices else emptyList(),
+                        selected = picked,
+                        answer = if (stage == 2 && mc) answerIndex else null,
+                        locked = stage == 2,
+                        onPick = { i -> onActivity(); picked = i },
+                    )
+                    feedback()
+                    if (!mc) shortInput()
+                    wrongPart()
+                }
                 action()
-                wrongPart()
-                Spacer(Modifier.height(8.dp))
             }
         }
     }
@@ -276,12 +274,12 @@ private fun MathKeypad(value: String, enabled: Boolean, onChange: (String) -> Un
     )
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Box(
-            Modifier.fillMaxWidth().height(60.dp).clip(RoundedCornerShape(14.dp)).background(Color.White)
+            Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(14.dp)).background(Color.White)
                 .border(1.5.dp, Color(0xFFE1EAF4), RoundedCornerShape(14.dp)).padding(horizontal = 16.dp),
             contentAlignment = Alignment.CenterStart,
         ) {
-            if (value.isEmpty()) Text("답 (예: 3/8, x=4)", color = Color(0xFF8A97AB))
-            else Text(value, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2B3A4F))
+            if (value.isEmpty()) Text("답 (예: 3/8, x=4)", color = Color(0xFF8A97AB), maxLines = 1)
+            else Text(value, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2B3A4F), maxLines = 1)
         }
         rows.forEach { row ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -299,9 +297,10 @@ private fun MathKeypad(value: String, enabled: Boolean, onChange: (String) -> Un
                         },
                         enabled = enabled,
                         shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.weight(1f).height(52.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+                        modifier = Modifier.weight(1f).height(46.dp),
                     ) {
-                        Text(if (key == "C") "지움" else key, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        Text(key, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
                     }
                 }
             }

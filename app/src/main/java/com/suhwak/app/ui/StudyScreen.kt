@@ -490,9 +490,12 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
     }
 
     /** Moves on to the next step, or ends the session after the last one. */
+    /** 수확중: 이번 학습이 씨앗(수학 문제)만이면 단계 없이 한 번 풀고 끝난다. */
+    val seedsOnly: Boolean get() = runWords.isNotEmpty() && runWords.all { it.isSeed }
+
     fun nextStep() {
         touch()
-        if (stepIndex < steps.lastIndex) {
+        if (stepIndex < steps.lastIndex && !seedsOnly) {
             stepIndex++
             beginStep()
         } else {
@@ -871,7 +874,7 @@ fun StudyScreen(
                     FitText(
                         if (vm.finished) "학습 결과"
                         else (if (vm.test) "📝 시험 " else if (vm.review) "복습 " else "") +
-                            (if (vm.stepCount > 1) "${vm.stepIndex + 1}/${vm.stepCount} ${vm.stepLabel} · " else "") +
+                            (if (vm.stepCount > 1 && !vm.seedsOnly) "${vm.stepIndex + 1}/${vm.stepCount} ${vm.stepLabel} · " else "") +
                             if (vm.mode == StudyMode.LIST) "${vm.runWords.size}개" else "${vm.doneCount}/${vm.sessionSize}",
                         androidx.compose.material3.LocalTextStyle.current,
                         align = androidx.compose.ui.text.style.TextAlign.Start,
