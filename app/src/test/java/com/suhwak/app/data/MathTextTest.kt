@@ -14,6 +14,11 @@ class MathTextTest {
         assertEquals("x ≥ 3", MathText.plain("\$x \\geq 3\$"))
         assertEquals("y = -2x + 5", MathText.plain("\$y = -2x + 5\$"))
         assertEquals("5⁵ × 5³ = 5^(□)", MathText.plain("\$5^{5} \\times 5^{3} = 5^{\\square}\$"))
+        assertEquals("1.3555⋯ = 1.35\u0307", MathText.plain("\$1.3555\\cdots = 1.3\\dot{5}\$"))
+        assertEquals("((-2y/3x)²)²", MathText.plain("\$\\left\\{\\left(-\\frac{2y}{3x}\\right)^{2}\\right\\}^{2}\$"))
+        assertEquals("EB = 2a", MathText.plain("\$\\overline{EB} = 2a\$"))
+        assertEquals("x⁴/y⁸", MathText.plain("\$\\frac{x^{4}}{y^{8}}\$"))
+        assertEquals("a/10ⁿ 꼴", MathText.plain("\$\\frac{a}{10^{n}}\$ 꼴"))
         assertEquals("그냥 글자", MathText.plain("그냥 글자"))
     }
 }

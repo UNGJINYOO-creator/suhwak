@@ -10,10 +10,11 @@ object MathText {
         '0' to '⁰', '1' to '¹', '2' to '²', '3' to '³', '4' to '⁴', '5' to '⁵', '6' to '⁶', '7' to '⁷', '8' to '⁸', '9' to '⁹',
         '-' to '⁻', '+' to '⁺', 'n' to 'ⁿ', '(' to '⁽', ')' to '⁾',
     )
+    // 순서가 중요: 긴 이름이 먼저 (\left가 \le보다, \cdots가 \cdot보다 앞)
     private val symbols = linkedMapOf(
-        "\\times" to "×", "\\div" to "÷", "\\cdot" to "·", "\\leq" to "≤", "\\geq" to "≥", "\\le" to "≤", "\\ge" to "≥",
+        "\\left" to "", "\\right" to "", "\\cdots" to "⋯", "\\times" to "×", "\\div" to "÷", "\\cdot" to "·", "\\leq" to "≤", "\\geq" to "≥", "\\le" to "≤", "\\ge" to "≥",
         "\\neq" to "≠", "\\pm" to "±", "\\square" to "□", "\\pi" to "π", "\\circ" to "°", "\\angle" to "∠",
-        "\\triangle" to "△", "\\left" to "", "\\right" to "", "\\," to " ", "\\;" to " ", "\\quad" to " ",
+        "\\triangle" to "△", "\\{" to "(", "\\}" to ")", "\\overline" to "", "\\," to " ", "\\;" to " ", "\\quad" to " ",
     )
     private val frac = Regex("\\\\[dt]?frac\\{([^{}]*)\\}\\{([^{}]*)\\}")
     private val sqrt = Regex("\\\\sqrt\\{([^{}]*)\\}")
@@ -25,16 +26,19 @@ object MathText {
         if (!text.contains('$') && !text.contains('\\')) return text
         var s = text
         s = cases.replace(s) { m -> m.groupValues[1].split("\\\\").joinToString(", ") { it.trim() } }
+        s = sup(s)  // 지수를 먼저: \frac{x^{2}}{y^{4}} 처럼 분수 안에 중괄호가 있어도 분수로 읽히게
         repeat(3) { s = frac.replace(s) { m -> "${wrap(m.groupValues[1])}/${wrap(m.groupValues[2])}" } }
         s = sqrt.replace(s) { m -> "√" + wrap(m.groupValues[1]) }
         s = dot.replace(s) { m -> m.groupValues[1].map { "$iṫ" }.joinToString("") }
-        s = power.replace(s) { m ->
-            val p = m.groupValues[1].ifEmpty { m.groupValues[2] }
-            if (p.all { it in sup }) p.map { sup.getValue(it) }.joinToString("") else "^($p)"
-        }
+        s = sup(s)
         symbols.forEach { (k, v) -> s = s.replace(k, v) }
         s = s.replace("$", "").replace("{", "").replace("}", "")
         return s.replace(Regex("[ \\t]+"), " ").trim()
+    }
+
+    private fun sup(text: String): String = power.replace(text) { m ->
+        val p = m.groupValues[1].ifEmpty { m.groupValues[2] }
+        if (p.all { it in sup }) p.map { sup.getValue(it) }.joinToString("") else "^($p)"
     }
 
     /** 분자·분모가 여러 항이면 괄호로 묶는다: \frac{x+1}{2} -> (x+1)/2 */
