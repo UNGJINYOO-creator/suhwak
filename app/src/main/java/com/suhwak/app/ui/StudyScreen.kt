@@ -290,7 +290,7 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
     /** 3차까지 간 문제 하나에서 나온 쌍둥이 묶음. */
     private class TwinChain(val concept: String, val size: Int, var answered: Int = 0, var firstTry: Int = 0)
     private val twinOf = mutableMapOf<Long, TwinChain>()
-    /** 이번 씨앗을 몇 차에 맞혔는지 (1, 2, 3). */
+    /** 이번 씨앗을 몇 차에 맞혔는지 (1, 2, 3, 풀이를 보고 맞히면 4). */
     private var solveTries = 0
     var twinsServed by mutableStateOf(0)
         private set
@@ -855,6 +855,11 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
      */
     private fun afterSolve(word: Word, guessed: Boolean): List<Word> {
         val firstTry = solveTries == 1 && !guessed
+        // 풀이를 보고서야 맞힌 문제(4): 쌍둥이와 별개로 다음 날에도 한 번 더 (다시 볼 유형)
+        if (solveTries == 4 && settings.weakDaily > 0 && word.pos.isNotBlank()) {
+            weakTypes.add(word.pos)
+            if (word.pos !in weakAdded) weakAdded += word.pos
+        }
         reviewOf[word.id]?.let { concept ->
             if (weakTypes.result(concept, firstTry, settings.weakClear)) celebrate("🎓 '$concept' 다시 보기 졸업!")
         }
