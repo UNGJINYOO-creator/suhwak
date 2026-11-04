@@ -210,6 +210,9 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                 var blank by remember { mutableStateOf(settings.blankLevel) }
                 var size by remember { mutableIntStateOf(settings.sessionSize) }
                 var testSize by remember { mutableIntStateOf(settings.testSize) }
+                var twins by remember { mutableIntStateOf(settings.twinCount) }
+                var weakDaily by remember { mutableIntStateOf(settings.weakDaily) }
+                var weakClear by remember { mutableIntStateOf(settings.weakClear) }
                 var shuffle by remember { mutableStateOf(settings.shuffle) }
                 var backFirst by remember { mutableStateOf(settings.backFirst) }
                 var textScale by remember { mutableStateOf(settings.textScale) }
@@ -254,7 +257,8 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                 }
                 Group(
                     "📚 풀기",
-                    (if (size > 0) "한 번에 ${size}문제" else "한 번에 전부") + " · 시험 ${testSize}문제",
+                    (if (size > 0) "한 번에 ${size}문제" else "한 번에 전부") + " · 쌍둥이 " + (if (twins > 0) "${twins}문제" else "끔") +
+                        " · 다시 보기 " + (if (weakDaily > 0) "하루 ${weakDaily}문제" else "끔"),
                     open == "study", { toggle("study") },
                 ) {
                     Body {
@@ -262,6 +266,17 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                         // 수학 문제에 쓰이지 않아 숨긴다. 씨앗은 언제나 '수학 풀기'로 나온다.
                         Labeled("한 번에 풀 문제") {
                             NumberChoice(size, Opt.session, "문제", 999, min = 0) { size = it; settings.sessionSize = it }
+                        }
+                        Labeled("쌍둥이 문제", "3차(빈칸 풀이)까지 간 문제 뒤에 같은 유형 문제를 바로 이어서 내요") {
+                            NumberChoice(twins, Opt.twins, "문제", 5, min = 0) { twins = it; settings.twinCount = it }
+                        }
+                        Labeled("다시 볼 유형", "쌍둥이에서도 틀린 유형을 다음 날부터 하루에 이만큼 다시 내요") {
+                            NumberChoice(weakDaily, Opt.weakDaily, "문제", 5, min = 0) { weakDaily = it; settings.weakDaily = it }
+                        }
+                        if (weakDaily > 0) {
+                            Labeled("다시 보기 졸업", "다시 보기 문제를 1차에 이만큼(서로 다른 날) 맞히면 그만 내요") {
+                                NumberChoice(weakClear, Opt.weakClear, "번", 7) { weakClear = it; settings.weakClear = it }
+                            }
                         }
                         Labeled("시험 문제 수") {
                             NumberChoice(testSize, Opt.test, "문제", 200) { testSize = it; settings.testSize = it }

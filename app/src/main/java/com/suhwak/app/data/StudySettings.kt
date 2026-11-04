@@ -120,6 +120,21 @@ class StudySettings(context: Context) {
         get() = prefs.getBoolean("soundEffects", true)
         set(v) = prefs.edit().putBoolean("soundEffects", v).apply()
 
+    /** 수확중: 3차(빈칸 풀이)까지 간 문제 뒤에 바로 이어서 내는 같은 유형 쌍둥이 문제 수 (0 = 끔). */
+    var twinCount: Int
+        get() = prefs.getInt("twinCount", 3)
+        set(v) = prefs.edit().putInt("twinCount", v).apply()
+
+    /** 다시 볼 유형(쌍둥이에서도 틀린 유형)을 다음 날부터 하루에 몇 문제씩 다시 낼지 (0 = 끔). */
+    var weakDaily: Int
+        get() = prefs.getInt("weakDaily", 1)
+        set(v) = prefs.edit().putInt("weakDaily", v).apply()
+
+    /** 다시 볼 유형의 졸업: 다시 보기 문제를 1차에 몇 번(서로 다른 날) 맞히면 그만 낼지. */
+    var weakClear: Int
+        get() = prefs.getInt("weakClear", 1)
+        set(v) = prefs.edit().putInt("weakClear", v).apply()
+
     /** Questions in 시험 모드. */
     var testSize: Int
         get() = prefs.getInt("testSize", 20)

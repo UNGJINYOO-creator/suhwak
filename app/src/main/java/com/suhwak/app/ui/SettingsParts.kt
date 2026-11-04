@@ -331,7 +331,7 @@ object Opt {
     val minutes = listOf(0 to "끔", 10 to "10분", 20 to "20분", 30 to "30분")
     val reminder = listOf(-1 to "끔", 19 to "7시", 20 to "8시", 21 to "9시")
     val reportHour = listOf(-1 to "끔", 20 to "8시", 21 to "9시", 22 to "10시")
-    val session = listOf(0 to "전부", 10 to "10장", 20 to "20장")
+    val session = listOf(0 to "전부", 10 to "10문제", 20 to "20문제")
     val test = listOf(10 to "10문제", 20 to "20문제", 30 to "30문제")
     val hand = listOf(5 to "5장", 10 to "10장", 20 to "20장")
     val leave = listOf(1 to "1번", 2 to "2번", 3 to "3번")
@@ -339,6 +339,9 @@ object Opt {
     val recentDays = listOf(3 to "3일", 7 to "7일", 14 to "14일")
     val idle = listOf(20 to "20초", 30 to "30초", 60 to "60초")
     val tries = listOf(0 to "무제한", 1 to "1번", 3 to "3번")
+    val twins = listOf(0 to "끔", 2 to "2문제", 3 to "3문제")
+    val weakDaily = listOf(0 to "끔", 1 to "1문제", 2 to "2문제")
+    val weakClear = listOf(1 to "1번", 2 to "2번", 3 to "3번")
     val textScale = listOf(0.85f to "작게", 1f to "보통", 1.2f to "크게")
 
     fun reminderLabel(h: Int) = when {

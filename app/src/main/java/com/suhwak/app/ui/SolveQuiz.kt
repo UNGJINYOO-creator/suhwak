@@ -64,53 +64,65 @@ const val SOLVE_FAST_MS = 10_000L
  * 씨앗(수학 문제) 풀기 — 공책 풀이 방식. 앱에는 문제와 답만, 풀이는 종이 공책에 한다.
  *  - 태블릿(가로로 넓을 때): 왼쪽 문제 크게 / 오른쪽 답 입력.  휴대폰: 위 문제 / 아래 답.
  *  - 문제 위의 공책 번호(오늘 날짜 · n번)를 공책에 같이 적고 푼다.
- *  - 객관식은 보기 버튼, 주관식은 수학 숫자판 (글자 답이면 '글자로 쓰기').
- *  - 1번 틀리면 물 주기(힌트) + 공책 풀이 다시 확인, 2번 틀리면 정답·빈칸 풀이 + '공책에 옮겨 적기' 체크.
- * [onAnswered]는 결과가 정해질 때 한 번: 처음에 맞히면 true, 힌트 받고 맞히거나 두 번 틀리면 false.
+ *  - 객관식은 보기 버튼, 주관식은 수학 숫자판 (글자 답이면 '글자 입력').
+ *  - 1차: 문제만.  2차: 힌트 한 줄 + 다시.  3차: 풀이의 빈칸(㉠ ㉡)을 다 맞힐 때까지 채운 뒤 답을 다시 낸다.
+ *    3차는 정답을 미리 보여주지 않고, 끝까지 맞혀야 다음 문제로 넘어간다 (아이가 직접 이해하고 넘어가게).
+ * [onAnswered]는 끝에 한 번: 몇 차에 맞혔는지(1, 2, 3)와 마지막 답.
+ * [badge]: 문제 위에 붙는 표시 (예: "🌱 쌍둥이 1/3", "🔁 다시 보기").
  */
 @Composable
 fun SolveQuiz(
     word: Word,
     number: Int,
-    onAnswered: (correct: Boolean, response: String) -> Unit,
+    onAnswered: (tries: Int, response: String) -> Unit,
     onNext: () -> Unit,
     onActivity: () -> Unit,
     modifier: Modifier = Modifier,
+    badge: String? = null,
 ) {
     val context = LocalContext.current
     val notebook = remember { NotebookCopy(context) }
     val mc = word.qtype == "mc"
     val choices = remember(word.id) { SeedImport.choicesOf(word) }
+    val steps = remember(word.id) { SeedImport.stepsOf(word) }
     val answerIndex = remember(word.id) { if (mc) CIRCLES.indexOf(word.meaning.trim().firstOrNull() ?: ' ') + 1 else 0 }
     val shownAt = remember(word.id) { System.currentTimeMillis() }
     val label = remember(word.id, number) { SimpleDateFormat("M/d", Locale.KOREA).format(Date()) + " · ${number}번" }
-    var stage by remember(word.id) { mutableIntStateOf(0) } // 0 첫 시도, 1 힌트 뒤 다시, 2 끝
-    var finalRight by remember(word.id) { mutableStateOf(false) }
+    var stage by remember(word.id) { mutableIntStateOf(0) } // 0 1차, 1 2차(힌트), 2 3차(빈칸 풀이), 3 끝
+    var tries by remember(word.id) { mutableIntStateOf(0) } // 맞힌 차수 (끝난 뒤)
+    var clozeDone by remember(word.id) { mutableStateOf(false) }
+    var retryWrong by remember(word.id) { mutableStateOf(false) }
     var picked by remember(word.id) { mutableStateOf<Int?>(null) }
     var typed by remember(word.id) { mutableStateOf("") }
     var useKeyboard by remember(word.id) { mutableStateOf(false) }
     var askFast by remember(word.id) { mutableStateOf(false) }
     var copied by remember(word.id) { mutableStateOf(notebook.isCopied(word.id)) }
     val response = if (mc) picked?.toString().orEmpty() else typed.trim()
-    val missedAtEnd = stage == 2 && !MathGrade.isRight(word.qtype, word.meaning, response)
+    val canAnswer = stage < 2 || (stage == 2 && clozeDone)
 
     fun harvest() {
         onActivity()
         val right = MathGrade.isRight(word.qtype, word.meaning, response)
         when {
             right -> {
-                finalRight = stage == 0
-                stage = 2
-                onAnswered(finalRight, response)
+                tries = stage + 1
+                stage = 3
+                onAnswered(tries, response)
             }
             stage == 0 -> {
                 stage = 1
                 picked = null
             }
-            else -> {
+            stage == 1 -> {
                 stage = 2
-                finalRight = false
-                onAnswered(false, response)
+                picked = null
+                typed = ""
+            }
+            else -> {
+                // 3차: 정답을 보여주지 않고 다시 (빈칸 풀이를 보고 다시 낸다)
+                retryWrong = true
+                picked = null
+                typed = ""
             }
         }
     }
@@ -128,11 +140,17 @@ fun SolveQuiz(
                 fontSize = 16.sp,
                 modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(Color(0xFFFFF3D6)).padding(horizontal = 8.dp, vertical = 3.dp),
             )
+            if (badge != null) Tag(badge, Color(0xFFFFE9D6), Color(0xFF8A4B12))
             if (word.pos.isNotBlank()) Tag(word.pos, Color(0xFFE2F5EF), Color(0xFF24493F))
             if (word.level.isNotBlank()) Tag(word.level, Color(0xFFF2F9FC), Color(0xFF56657C))
             Spacer(Modifier.weight(1f))
             Text(
-                when { stage == 0 -> "1차"; stage == 1 -> "2차 · 힌트"; missedAtEnd -> "❌ 오답"; else -> "⭕ 정답" },
+                when (stage) {
+                    0 -> "1차"
+                    1 -> "2차 · 힌트"
+                    2 -> "3차 · 빈칸 풀이"
+                    else -> "⭕ ${tries}차 정답"
+                },
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
             )
@@ -140,22 +158,29 @@ fun SolveQuiz(
     }
 
     val feedback: @Composable () -> Unit = {
-        when {
-            stage == 1 -> Note(
-                "💡 힌트",
-                word.hint.ifBlank { "문제를 다시 읽어 봐요" },
-                Color(0xFFE6F2FF), Color(0xFF24456F),
-            )
-            stage == 2 && finalRight -> Note("⭕ 정답!", word.example, Color(0xFFE2F5EF), Color(0xFF24493F))
-            stage == 2 && !missedAtEnd -> Note("⭕ 정답! (힌트)", word.example, Color(0xFFE2F5EF), Color(0xFF24493F))
-            stage == 2 -> Note("❌ 정답: ${word.meaning}", word.example, Color(0xFFFFF6E5), Color(0xFF6B3A10))
+        when (stage) {
+            1 -> Note("💡 힌트", word.hint.ifBlank { "문제를 다시 읽어 봐요" }, Color(0xFFE6F2FF), Color(0xFF24456F))
+            2 -> {
+                Note(
+                    "🧩 3차 · 빈칸 풀이",
+                    if (!clozeDone) "빈칸을 채우면서 풀이를 따라가요. 다 맞히면 답을 다시 내요." else "이제 답을 다시 내요.",
+                    Color(0xFFFFF6E5), Color(0xFF6B3A10),
+                )
+                if (retryWrong) Note("❌ 아직 아니에요", "빈칸 풀이를 다시 보고, 공책에 다시 풀어 봐요.", Color(0xFFFDECEC), Color(0xFF8A2E2A))
+            }
+            3 -> when (tries) {
+                1 -> Note("⭕ 정답!", word.example, Color(0xFFE2F5EF), Color(0xFF24493F))
+                2 -> Note("⭕ 정답! (힌트)", word.example, Color(0xFFE2F5EF), Color(0xFF24493F))
+                else -> Note("⭕ 이해 완료!", word.example, Color(0xFFE2F5EF), Color(0xFF24493F))
+            }
         }
     }
 
-    val wrongPart: @Composable () -> Unit = {
-        if (missedAtEnd) {
-            val steps = remember(word.id) { SeedImport.stepsOf(word) }
-            if (steps.isNotEmpty()) ClozeBox(steps, onActivity)
+    val clozePart: @Composable () -> Unit = {
+        if (stage >= 2 && tries != 1 && tries != 2) {
+            ClozeSolve(steps, word.example, done = clozeDone, onActivity = onActivity, onDone = { clozeDone = true })
+        }
+        if (stage == 3 && tries == 3) {
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFFFFF8E8)).padding(end = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -171,24 +196,29 @@ fun SolveQuiz(
             OutlinedTextField(
                 value = typed,
                 onValueChange = { typed = it; onActivity() },
-                enabled = stage < 2,
+                enabled = canAnswer,
                 singleLine = true,
                 label = { Text("답") },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { if (response.isNotEmpty() && stage < 2) tryHarvest() }),
+                keyboardActions = KeyboardActions(onDone = { if (response.isNotEmpty() && canAnswer) tryHarvest() }),
                 modifier = Modifier.fillMaxWidth(),
             )
-            if (stage < 2) TextButton(onClick = { useKeyboard = false }) { Text("숫자판") }
+            if (stage < 3) TextButton(onClick = { useKeyboard = false }) { Text("숫자판") }
         } else {
-            MathKeypad(typed, enabled = stage < 2, onChange = { typed = it; onActivity() })
-            if (stage < 2) TextButton(onClick = { useKeyboard = true }) { Text("글자 입력") }
+            MathKeypad(typed, enabled = canAnswer, onChange = { typed = it; onActivity() })
+            if (stage < 3) TextButton(onClick = { useKeyboard = true }) { Text("글자 입력") }
         }
     }
 
     val action: @Composable () -> Unit = {
-        if (stage < 2) {
-            Button(onClick = { tryHarvest() }, enabled = response.isNotEmpty(), modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(16.dp)) {
-                Text("채점하기", fontSize = 19.sp, fontWeight = FontWeight.Bold)
+        if (stage < 3) {
+            Button(
+                onClick = { tryHarvest() },
+                enabled = canAnswer && response.isNotEmpty(),
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                shape = RoundedCornerShape(16.dp),
+            ) {
+                Text(if (stage == 2 && !clozeDone) "빈칸을 먼저 채워요" else "채점하기", fontSize = 19.sp, fontWeight = FontWeight.Bold)
             }
         } else {
             Button(onClick = onNext, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(16.dp)) {
@@ -208,7 +238,7 @@ fun SolveQuiz(
                     header()
                     MathView(word.question.ifBlank { word.text }, emptyList(), null, null, true, {})
                     feedback()
-                    wrongPart()
+                    clozePart()
                 }
                 Column(Modifier.weight(0.85f).fillMaxHeight().padding(horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -218,8 +248,8 @@ fun SolveQuiz(
                                 question = "",
                                 choices = choices,
                                 selected = picked,
-                                answer = if (stage == 2) answerIndex else null,
-                                locked = stage == 2,
+                                answer = if (stage == 3) answerIndex else null,
+                                locked = !canAnswer || stage == 3,
                                 onPick = { i -> onActivity(); picked = i },
                             )
                         } else {
@@ -238,13 +268,13 @@ fun SolveQuiz(
                         question = word.question.ifBlank { word.text },
                         choices = if (mc) choices else emptyList(),
                         selected = picked,
-                        answer = if (stage == 2 && mc) answerIndex else null,
-                        locked = stage == 2,
+                        answer = if (stage == 3 && mc) answerIndex else null,
+                        locked = !canAnswer || stage == 3,
                         onPick = { i -> onActivity(); picked = i },
                     )
                     feedback()
+                    clozePart()
                     if (!mc) shortInput()
-                    wrongPart()
                 }
                 action()
             }
@@ -327,17 +357,26 @@ private fun Note(title: String, body: String, bg: Color, fg: Color) {
     }
 }
 
-/** 두 번 틀렸을 때: 풀이를 따라가며 ㉠ ㉡ 빈칸을 채워 본다. */
+/** 아이가 직접 써야 하는 빈칸: 수·식만. 한글 낱말이나 부등호 빈칸은 미리 채워서 보여준다 (입력이 어려워서). */
+internal fun mustType(answer: String): Boolean = answer.none { it in '가'..'힣' || it in "<>≤≥" }
+
+/**
+ * 3차: 풀이를 따라가며 ㉠ ㉡ 빈칸을 채운다. 틀린 칸만 빨갛게 표시하고, 다 맞힐 때까지 계속 (정답은 미리 보여주지 않음).
+ * 다 맞히면 [onDone]. 풀이 줄이 없으면 해설을 보여주고 바로 [onDone].
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ClozeBox(steps: List<String>, onActivity: () -> Unit) {
+private fun ClozeSolve(steps: List<String>, explanation: String, done: Boolean, onActivity: () -> Unit, onDone: () -> Unit) {
     val cloze = remember(steps) { MathCloze.build(steps) }
-    if (cloze.answers.isEmpty()) {
-        Note("풀이", cloze.solution.joinToString("\n"), Color(0xFFF2F9FC), Color(0xFF2B3A4F))
+    val need = remember(steps) { cloze.answers.indices.filter { mustType(cloze.answers[it]) }.toSet() }
+    if (need.isEmpty()) {
+        androidx.compose.runtime.LaunchedEffect(steps) { onDone() }
+        Note("풀이", (cloze.solution.takeIf { steps.isNotEmpty() } ?: listOf(explanation)).joinToString("\n"), Color(0xFFF2F9FC), Color(0xFF2B3A4F))
         return
     }
     val typed = remember(steps) { mutableStateListOf(*Array(cloze.answers.size) { "" }) }
-    var checked by remember(steps) { mutableStateOf(false) }
+    val locked = remember(steps) { mutableStateListOf(*Array(cloze.answers.size) { it !in need }) }
+    val wrong = remember(steps) { mutableStateListOf(*Array(cloze.answers.size) { false }) }
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xFFF7FAFC)).padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -350,27 +389,44 @@ private fun ClozeBox(steps: List<String>, onActivity: () -> Unit) {
                         Text(piece.text, fontSize = 18.sp, modifier = Modifier.align(Alignment.CenterVertically))
                     } else {
                         val i = piece.blankIndex
-                        val right = checked && MathGrade.short(cloze.answers[i], typed[i])
-                        OutlinedTextField(
-                            value = typed[i],
-                            onValueChange = { typed[i] = it; onActivity() },
-                            enabled = !checked,
-                            singleLine = true,
-                            placeholder = { Text(MathCloze.MARKS[i].toString()) },
-                            modifier = Modifier.width(96.dp),
-                        )
-                        if (checked && !right) {
-                            Text(cloze.answers[i], color = Color(0xFF2B6B5F), fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.align(Alignment.CenterVertically).padding(start = 4.dp))
+                        if (locked[i]) {
+                            Text(
+                                if (i in need) typed[i] else cloze.answers[i],
+                                color = Color(0xFF2B6B5F), fontWeight = FontWeight.Bold, fontSize = 18.sp,
+                                modifier = Modifier.align(Alignment.CenterVertically).clip(RoundedCornerShape(6.dp))
+                                    .background(Color(0xFFE2F5EF)).padding(horizontal = 6.dp, vertical = 2.dp),
+                            )
+                        } else {
+                            OutlinedTextField(
+                                value = typed[i],
+                                onValueChange = { typed[i] = it; wrong[i] = false; onActivity() },
+                                singleLine = true,
+                                isError = wrong[i],
+                                placeholder = { Text(MathCloze.MARKS[i].toString()) },
+                                modifier = Modifier.width(104.dp),
+                            )
                         }
                     }
                 }
             }
         }
-        if (!checked) {
-            OutlinedButton(onClick = { onActivity(); checked = true }, modifier = Modifier.fillMaxWidth()) { Text("확인") }
+        if (!done) {
+            OutlinedButton(
+                onClick = {
+                    onActivity()
+                    for (i in need) {
+                        if (locked[i]) continue
+                        if (MathGrade.short(cloze.answers[i], typed[i])) locked[i] = true else wrong[i] = true
+                    }
+                    if (need.all { locked[it] }) onDone()
+                },
+                enabled = need.any { !locked[it] && typed[it].isNotBlank() },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("빈칸 확인") }
+            val left = need.count { !locked[it] }
+            if (wrong.any { it }) Text("빨간 칸을 다시 풀어 봐요 (남은 빈칸 ${left}개)", color = Color(0xFF8A2E2A), fontWeight = FontWeight.Bold)
         } else {
-            val n = cloze.answers.indices.count { MathGrade.short(cloze.answers[it], typed[it]) }
-            Text("빈칸 ${n}/${cloze.answers.size} 정답", fontWeight = FontWeight.Bold, color = Color(0xFF2B6B5F))
+            Text("빈칸을 다 채웠어요 👍", fontWeight = FontWeight.Bold, color = Color(0xFF2B6B5F))
         }
     }
 }

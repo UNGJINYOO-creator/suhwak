@@ -81,6 +81,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -128,6 +129,7 @@ import com.suhwak.app.data.EveningReport
 import com.suhwak.app.data.Weakness
 import com.suhwak.app.data.MasterCheck
 import com.suhwak.app.data.WrongNote
+import com.suhwak.app.data.WeakTypes
 import com.suhwak.app.data.Word
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -276,6 +278,26 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
 
     /** All words, for wrong options in multiple choice. */
     private var pool = listOf<Word>()
+
+    // ── 수확중: 쌍둥이 문제와 다시 볼 유형 ──
+    /** 모든 씨앗 (쌍둥이·다시 보기 문제를 고르는 곳). */
+    private var allSeeds = listOf<Word>()
+    private val weakTypes = WeakTypes(app)
+    /** 문제 위에 붙는 표시: 쌍둥이 n/N, 다시 보기. */
+    val badges = mutableStateMapOf<Long, String>()
+    /** 다시 볼 유형으로 나온 문제 (wordId -> 유형). */
+    private val reviewOf = mutableMapOf<Long, String>()
+    /** 3차까지 간 문제 하나에서 나온 쌍둥이 묶음. */
+    private class TwinChain(val concept: String, val size: Int, var answered: Int = 0, var firstTry: Int = 0)
+    private val twinOf = mutableMapOf<Long, TwinChain>()
+    /** 이번 씨앗을 몇 차에 맞혔는지 (1, 2, 3). */
+    private var solveTries = 0
+    var twinsServed by mutableStateOf(0)
+        private set
+    var twinsPassed by mutableStateOf(0)
+        private set
+    /** 이번 학습에서 '다시 볼 유형'이 된 유형들. */
+    val weakAdded = mutableStateListOf<String>()
     private var sessionWords = listOf<Word>()
     /** Words missed at least once in this session (for the summary report). */
     val everMissed = mutableStateListOf<Word>()
@@ -303,6 +325,7 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
         viewModelScope.launch {
             val all = dao.getAllWords()
             pool = all
+            allSeeds = all.filter { it.isSeed && !it.excluded }
             sessionWords = when {
                 review -> dao.getDueWords(System.currentTimeMillis())
                 wrongOnly -> wrongNote.ids.let { ids -> all.filter { it.id in ids && !it.excluded } }
@@ -330,7 +353,7 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
                         val days = settings.recentDays
                         val share = settings.recentShare
                         val picked = CollectionMix.pick(candidates, limit, share, days, System.currentTimeMillis())
-                        sessionWords = order(picked)
+                        sessionWords = withReview(order(picked))
                         dao.touchDecks(listOf(deckId) + sessionWords.map { it.deckId }.distinct(), System.currentTimeMillis())
                         start(sessionWords)
                         loading = false
@@ -340,7 +363,7 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
                 }
             }
             val limit = if (test) 0 else settings.sessionSize
-            sessionWords = order(sessionWords).let { if (limit > 0) it.take(limit) else it }
+            sessionWords = withReview(order(sessionWords).let { if (limit > 0) it.take(limit) else it })
             dao.touchDecks(sessionWords.map { it.deckId }.distinct(), System.currentTimeMillis())
             start(sessionWords)
             loading = false
@@ -392,15 +415,19 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
         if (sound && settings.soundEffects) tone?.startTone(android.media.ToneGenerator.TONE_PROP_ACK, 150)
     }
 
-    /** One fish for each word learned (first right answer today); combos only cheer. */
-    private fun reward(correct: Boolean, caught: Boolean) {
+    /**
+     * 열매: 오늘 처음 맞힌 문제마다. 수학 씨앗은 1차 2개 · 2차 1개 · 3차 0개 ([fruit]). 콤보는 1차에 맞힐 때만 이어진다.
+     */
+    private fun reward(correct: Boolean, fruit: Int) {
+        val caught = fruit > 0
         if (!correct) {
             combo = 0
+            if (caught) addFruit(fruit, "🍎 +$fruit")
             return
         }
         combo++
         bestCombo = maxOf(bestCombo, combo)
-        val fish = if (caught) 1 else 0
+        val fish = fruit
         sessionStars += fish
         if (fish > 0) {
             game.addStars(fish)
@@ -410,13 +437,24 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
         }
         when {
             combo >= 3 -> {
-                celebrate("${combo}콤보! 🔥" + if (caught) " 🍎+1" else "", sound = false)
+                celebrate("${combo}콤보! 🔥" + if (caught) " 🍎+$fish" else "", sound = false)
                 if (settings.soundEffects) sfx.combo(settings.comboSound, combo)
             }
-            caught -> celebrate("🍎 +1", sound = false)
+            caught -> celebrate("🍎 +$fish", sound = false)
         }
         // Without a daily goal, the first right answer of the day earns the stamp.
         if (goalMs <= 0) stamp()
+    }
+
+    /** 콤보 없이 열매만 (2차에 맞혔을 때, 쌍둥이 통과 보너스). */
+    private fun addFruit(n: Int, text: String) {
+        if (n <= 0) return
+        sessionStars += n
+        game.addStars(n)
+        celebrate(text, sound = false)
+        viewModelScope.launch {
+            game.recount(dao, stats)?.let { celebrate("레벨 업! Lv.$it ${Levels.title(it)} 🎉 선물 열매 ${Levels.gift(it)}개") }
+        }
     }
 
     private fun stamp() {
@@ -445,7 +483,38 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
         if (telegramReady) viewModelScope.launch { EveningReport.goalPing(getApplication()) }
     }
 
-    private fun order(words: List<Word>) = if (shuffle) words.shuffled() else words.sortedBy { it.text.lowercase() }
+    private fun order(words: List<Word>): List<Word> = when {
+        // 씨앗: 담긴 순서(유형마다 골고루 돌아가는 순서)를 그대로, 다시 보기 문제는 언제나 맨 앞
+        words.isNotEmpty() && words.all { it.isSeed } ->
+            (if (shuffle) words.shuffled() else words).sortedBy { if (it.id in reviewOf) 0 else 1 }
+        shuffle -> words.shuffled()
+        else -> words.sortedBy { it.text.lowercase() }
+    }
+
+    /**
+     * 다시 볼 유형(쌍둥이에서도 틀린 유형): 오늘 아직 안 풀었으면 그 유형 문제를 [StudySettings.weakDaily]개씩 앞에 넣는다.
+     * 씨앗이 들어 있는 학습에서만, 시험에서는 넣지 않는다.
+     */
+    private fun withReview(words: List<Word>): List<Word> {
+        val per = settings.weakDaily
+        if (test || per <= 0 || words.none { it.isSeed }) return words
+        val inSession = words.map { it.id }.toHashSet()
+        val extra = mutableListOf<Word>()
+        for (concept in weakTypes.dueToday()) {
+            val picks = twinCandidates(concept, inSession + extra.map { it.id }).take(per)
+            picks.forEach {
+                reviewOf[it.id] = concept
+                badges[it.id] = "🔁 다시 보기"
+            }
+            extra += picks
+        }
+        return extra + words
+    }
+
+    /** 같은 유형의 다른 씨앗: 아직 안 푼 것 먼저, 그다음 복습 날짜가 가까운 것. */
+    private fun twinCandidates(concept: String, skip: Set<Long>): List<Word> =
+        allSeeds.filter { it.pos == concept && it.id !in skip }
+            .sortedWith(compareBy<Word>({ if (it.box == 0 && !it.mastered) 0 else 1 }, { it.dueAt }))
 
     private fun start(words: List<Word>) {
         runWords = words
@@ -653,10 +722,11 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
         answerMs = System.currentTimeMillis() - questionAt
     }
 
-    /** 씨앗 풀기 결과 (처음에 맞히면 true, 힌트 받고 맞히거나 두 번 틀리면 false). 다음 씨앗을 누르면 [next]로 기록된다. */
-    fun solveAnswered(correct: Boolean, response: String) {
+    /** 씨앗 풀기 결과: 몇 차에 맞혔는지(1, 2, 3). 1차만 '한 번에 맞힘'. 다음 문제를 누르면 [next]로 기록된다. */
+    fun solveAnswered(tries: Int, response: String) {
         touch()
-        answered = correct
+        solveTries = tries
+        answered = tries == 1
         lastResponse = response
         answerMs = System.currentTimeMillis() - questionAt
     }
@@ -705,8 +775,11 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
             }
             stats.recordAnswer(word.text, answer != Answer.UNKNOWN)
             // A word answered right for the first time today is one fish caught.
-            val caught = answer != Answer.UNKNOWN && stats.addLearned(word.id)
-            reward(answer != Answer.UNKNOWN, caught)
+            // 수학 씨앗: 1차·2차에 맞히면 '오늘 맞힌 문제' (열매 1차 2개, 2차 1개), 3차는 열매 없음.
+            val solved = if (mode == StudyMode.SOLVE) solveTries in 1..2 else answer != Answer.UNKNOWN
+            val caught = solved && stats.addLearned(word.id)
+            val fruit = if (!caught) 0 else if (mode == StudyMode.SOLVE) (if (solveTries == 1) 2 else 1) else 1
+            reward(answer != Answer.UNKNOWN, fruit)
             if (caught) {
                 learnedToday = stats.learnedCount
                 if (goalWords > 0 && learnedToday >= goalWords && !stats.wordGoalNotified) {
@@ -760,15 +833,68 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
         val times = (knownTimes[word.id] ?: 0) + if (answer == Answer.KNOWN) 1 else 0
         knownTimes[word.id] = times
 
-        val leaves = test || !repeatMissed ||
+        val twins = if (mode == StudyMode.SOLVE && !test) afterSolve(word, guessed) else emptyList()
+        val leaves = test || !repeatMissed || word.isSeed ||
             answer == Answer.MASTERED ||
             times >= (if (stepIndex == firstQuizStep) knownToLeave else 1) ||
             // A review word recalled right away doesn't need the extra rounds.
             (firstAnswer && answer == Answer.KNOWN && word.id in reviewedBefore)
         hand.removeAt(0)
         if (leaves) doneCount++ else hand += updated
+        // 쌍둥이 문제는 바로 다음에 이어서
+        if (twins.isNotEmpty()) hand.addAll(0, twins)
         refill()
         prepare()
+    }
+
+    /**
+     * 수학 씨앗을 풀고 난 뒤:
+     *  - 3차까지 간 문제(쌍둥이가 아닌 것) → 같은 유형 쌍둥이 [StudySettings.twinCount]개를 바로 이어서 낸다 (돌려줌).
+     *  - 쌍둥이 묶음이 끝나면: 모두 1차에 맞혔으면 보너스 열매 1개, 하나라도 못 맞혔으면 '다시 볼 유형'(다음 날부터 다시).
+     *  - 다시 보기 문제: 1차에 맞힌 날을 세서 졸업.
+     */
+    private fun afterSolve(word: Word, guessed: Boolean): List<Word> {
+        val firstTry = solveTries == 1 && !guessed
+        reviewOf[word.id]?.let { concept ->
+            if (weakTypes.result(concept, firstTry, settings.weakClear)) celebrate("🎓 '$concept' 다시 보기 졸업!")
+        }
+        val chain = twinOf[word.id]
+        if (chain != null) {
+            chain.answered++
+            if (firstTry) chain.firstTry++
+            if (chain.answered == chain.size) {
+                if (chain.firstTry == chain.size) {
+                    twinsPassed++
+                    addFruit(1, "🌱 쌍둥이 통과! 🍎 +1")
+                } else if (settings.weakDaily > 0) {
+                    weakTypes.add(chain.concept)
+                    if (chain.concept !in weakAdded) weakAdded += chain.concept
+                    celebrate("🔁 이 유형은 내일 다시 볼게요", sound = false)
+                }
+            }
+            return emptyList()  // 쌍둥이에서 또 3차까지 가도 쌍둥이를 더 만들지 않는다 (대신 다시 볼 유형으로)
+        }
+        val n = settings.twinCount
+        if (solveTries < 3 || n <= 0 || word.pos.isBlank()) return emptyList()
+        val busy = (runWords.map { it.id } + hand.map { it.id } + waiting.map { it.id }).toHashSet()
+        val twins = twinCandidates(word.pos, busy + word.id).take(n)
+        if (twins.isEmpty()) {
+            if (settings.weakDaily > 0) {
+                weakTypes.add(word.pos)
+                if (word.pos !in weakAdded) weakAdded += word.pos
+            }
+            return emptyList()
+        }
+        val c = TwinChain(word.pos, twins.size)
+        twins.forEachIndexed { i, t ->
+            twinOf[t.id] = c
+            badges[t.id] = "🌱 쌍둥이 ${i + 1}/${twins.size}"
+        }
+        runWords = runWords + twins
+        sessionSize += twins.size
+        twinsServed += twins.size
+        celebrate("🌱 같은 유형 쌍둥이 ${twins.size}문제가 이어서 나와요", sound = false)
+        return twins
     }
 
     /** Swipe right: go back to the previous card and take back its answer. */
@@ -1005,6 +1131,7 @@ fun StudyScreen(
                                     onNext = vm::next,
                                     onActivity = vm::touch,
                                     modifier = Modifier.weight(1f),
+                                    badge = vm.badges[word.id],
                                 )
                                 StudyMode.CHOICE -> ChoiceQuiz(
                                     word = word,
@@ -1401,6 +1528,20 @@ private fun Summary(vm: StudyViewModel, onBack: () -> Unit) {
                 "🍎 열매 ${vm.sessionStars}개 · 최고 ${vm.bestCombo}콤보",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        if (vm.twinsServed > 0) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "🌱 쌍둥이 ${vm.twinsServed}문제 · 통과 ${vm.twinsPassed}묶음",
+                style = MaterialTheme.typography.bodyLarge,
+            )
+        }
+        if (vm.weakAdded.isNotEmpty()) {
+            Text(
+                "🔁 내일 다시 볼 유형: ${vm.weakAdded.joinToString(", ")}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.outline,
             )
         }
         Spacer(Modifier.height(16.dp))
