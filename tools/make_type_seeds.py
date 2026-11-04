@@ -1,12 +1,16 @@
 """유형 씨앗(중2-1 수학) 만들기: app/src/main/assets/seeds_types.json
 
-중2-1 개념 문제집의 '필수 유형' 순서(7단원)를 따라, 유형마다 숫자를 새로 정해 문제를 만든다.
+중2-1 개념 문제집의 '필수 유형' 순서(7단원)를 따라, 유형마다 숫자를 무작위로 바꿔 가며 문제를 많이 만든다.
 책의 문제나 글을 옮기지 않는다: 유형(무엇을 묻는가)만 따르고 수·식·상황은 모두 새로 정한다.
 정답은 파이썬(분수 계산·sympy)이 계산하고, 객관식은 보기마다 참/거짓을 다시 확인한다 (AI가 정답을 쓰지 않음).
 형식은 마클리 문제 은행(/api/bank/export)과 같아서 앱의 SeedImport가 그대로 읽는다.
 
     pip install sympy
     python3 tools/make_type_seeds.py
+
+구조: 유형 하나 = @kind(단원, 유형 이름, 개수)를 붙인 함수 하나. 함수는 부를 때마다 숫자를 새로 뽑아 문제 하나를 만든다.
+조건이 안 맞는 숫자가 뽑히면 Retry를 던지고 다시 뽑는다. 같은 문제(문장+보기)는 한 번만 넣는다.
+단원 안에서는 '유형마다 2문제씩 한 바퀴'를 여러 번 도는 순서로 담아서, 앞에서부터 풀어도 모든 유형을 골고루 만난다.
 """
 from __future__ import annotations
 
@@ -20,167 +24,260 @@ import sympy as sp
 
 OUT = Path(__file__).resolve().parent.parent / "app/src/main/assets/seeds_types.json"
 TITLE = "유형 씨앗 2-1"
+ID_PREFIX = "t21"
 MARKS = "①②③④⑤"
-rng = random.Random(20261104)
-units: dict[str, list[dict]] = {}
-count = [0]
+R = random.Random(20261104)
 x, y, a, b = sp.symbols("x y a b")
-
 SUP = str.maketrans("0123456789-", "⁰¹²³⁴⁵⁶⁷⁸⁹⁻")
 
 
-def add(unit, concept, level, question, answer, *, choices=None, hint="", explanation="", steps=None):
-    count[0] += 1
-    units.setdefault(unit, []).append({
-        "bank_id": f"type21_{count[0]:03d}",
-        "concept": concept,
-        "type": "multiple_choice" if choices else "short_answer",
-        "level": level,
-        "question": question,
-        "choices": choices or [],
-        "answer": str(answer),
-        "hint": hint,
-        "explanation": explanation,
-        "steps": steps or [],
-    })
+class Retry(Exception):
+    """이번에 뽑은 숫자로는 문제가 안 됨 -> 다시 뽑기."""
+
+
+def need(cond):
+    if not cond:
+        raise Retry
+
+
+TYPES: list[tuple[str, str, int, object]] = []
+
+
+def kind(unit, concept, count=12):
+    def deco(fn):
+        TYPES.append((unit, concept, count, fn))
+        return fn
+    return deco
+
+
+def P(level, question, answer, *, choices=None, hint="", explanation="", steps=None):
+    return {"level": level, "question": question, "choices": choices or [], "answer": str(answer),
+            "hint": hint, "explanation": explanation, "steps": steps or []}
 
 
 def mc(correct: str, wrong: list[str]) -> tuple[list[str], str]:
     """보기 5개(정답 1 + 오답 4)를 섞고 정답 원문자를 돌려준다."""
-    wrong = [w for w in dict.fromkeys(wrong) if w != correct][:4]
-    assert len(wrong) == 4, (correct, wrong)
-    opts = [correct] + wrong
-    rng.shuffle(opts)
+    wrong = [w for w in dict.fromkeys(wrong) if w != correct]
+    need(len(wrong) >= 4)
+    opts = [correct] + R.sample(wrong, 4)
+    R.shuffle(opts)
     return opts, MARKS[opts.index(correct)]
 
 
 def pick(truth: list[tuple[str, bool]], want: bool) -> tuple[list[str], str]:
-    """'옳은 것은?'(want=True) / '옳지 않은 것은?'(want=False): 원하는 쪽이 정확히 하나인지 확인하고 섞는다."""
-    hit = [s for s, t in truth if t == want]
-    miss = [s for s, t in truth if t != want]
-    assert len(hit) == 1 and len(miss) == 4, truth
-    return mc(hit[0], miss)
+    """'옳은 것은?'(want=True) / '옳지 않은 것은?'(want=False): 원하는 쪽 하나 + 반대쪽 넷."""
+    hit = list(dict.fromkeys(s for s, t_ in truth if t_ == want))
+    miss = list(dict.fromkeys(s for s, t_ in truth if t_ != want))
+    need(hit and len(miss) >= 4)
+    return mc(R.choice(hit), miss)
 
 
-def nz(lo, hi, *, skip=(0,)):
-    return rng.choice([k for k in range(lo, hi + 1) if k not in skip])
+def nz(lo, hi, skip=(0,)):
+    return R.choice([k for k in range(lo, hi + 1) if k not in skip])
+
+
+def sgn(v):
+    """+ 3 / - 3 꼴 (앞 항 뒤에 붙일 때)."""
+    return f"+ {v}" if v >= 0 else f"- {-v}"
+
+
+def par(v):
+    """음수면 괄호: 3 -> 3, -3 -> (-3)."""
+    return f"({v})" if (isinstance(v, str) and v.startswith("-")) or (not isinstance(v, str) and v < 0) else f"{v}"
+
+
+def has_batchim(ch: str) -> bool:
+    if "가" <= ch <= "힣":
+        return (ord(ch) - 0xAC00) % 28 != 0
+    return ch in "013678"  # 영 일 삼 육 칠 팔
+
+
+PAIRS = {"을": ("을", "를"), "를": ("을", "를"), "이": ("이", "가"), "가": ("이", "가"), "은": ("은", "는"), "는": ("은", "는"), "과": ("과", "와"), "와": ("과", "와")}
+
+
+def josa(word: str, p_: str) -> str:
+    """word + 알맞은 조사: josa('사과', '과') -> '사과와'"""
+    a1, a2 = PAIRS[p_]
+    return word + (a1 if has_batchim(word[-1]) else a2)
+
+
+def tidy(text: str) -> str:
+    """계수 1과 부호 겹침 정리: 1x -> x, -1x -> -x, -1( -> -(, + - -> -, - - -> +"""
+    import re
+    text = re.sub(r"(?<![\d./^{])1([a-z(])", r"\1", text)
+    text = text.replace("+ -", "- ").replace("- -", "+ ").replace("-  ", "- ").replace("+  ", "+ ")
+    return text
+
+
+def fix_josa(text: str) -> str:
+    """숫자 바로 뒤 조사(3를 -> 3을, 4이 -> 4가)와 수식 뒤 조사($(2, 6)$를 -> $(2, 6)$을)를 맞춘다."""
+    import re
+    def sub(m):
+        d, p_ = m.group(1), m.group(3)
+        a1, a2 = PAIRS[p_]
+        return m.group(1) + m.group(2) + (a1 if has_batchim(d) else a2)
+    text = re.sub(r"(\d)(\)?\$?|\$)(을|를|이|가|은|는|과|와)(?=[\s,.?])", sub, text)
+    return text
 
 
 # ───────── 식 쓰기 (교과서 꼴: 3x²y, -\frac{1}{2}a, x² + 2x - 1) ─────────
 
 def term(c, mono, tex=True):
-    """c: 계수(Fraction), mono: [(문자, 지수)] -> 부호 없는 절댓값 항과 부호."""
-    letters = "".join(
-        (f"{v}^{{{e}}}" if tex else f"{v}{str(e).translate(SUP)}") if e != 1 else v for v, e in mono if e
-    )
+    letters = "".join((f"{v}^{{{e}}}" if tex else f"{v}{str(e).translate(SUP)}") if e != 1 else v for v, e in mono if e)
     c = F(c)
     m = abs(c)
     if m.denominator != 1:
-        coef = f"\\frac{{{m.numerator}}}{{{m.denominator}}}" if tex else f"{m.numerator}/{m.denominator}"
-        if not tex and letters:
-            coef = f"({m.numerator}/{m.denominator})"
+        coef = f"\\frac{{{m.numerator}}}{{{m.denominator}}}" if tex else (f"({m.numerator}/{m.denominator})" if letters else f"{m.numerator}/{m.denominator}")
         body = coef + letters
     else:
         body = ("" if m == 1 and letters else str(m.numerator)) + letters
     return ("-" if c < 0 else "+"), body
 
 
+def rat(c) -> F:
+    n, d = sp.fraction(sp.nsimplify(c))
+    return F(int(n), int(d))
+
+
 def fmt(expr, gens, tex=True):
-    """sympy 식 -> 교과서 꼴 문자열 (높은 차수부터)."""
+    """sympy 다항식 -> 교과서 꼴 문자열 (높은 차수부터)."""
     expr = sp.expand(sp.sympify(expr))
     if expr == 0:
         return "0"
     poly = sp.Poly(expr, *gens)
     out = ""
     for monom, coef in poly.terms(order="grlex"):
-        sign, body = term(F(int(sp.fraction(coef)[0]), int(sp.fraction(coef)[1])), list(zip([str(g) for g in gens], monom)), tex)
-        if not out:
-            out = ("-" if sign == "-" else "") + body
-        else:
-            out += f" {sign} {body}"
+        sign, body = term(rat(coef), list(zip([str(g) for g in gens], monom)), tex)
+        out = (("-" if sign == "-" else "") + body) if not out else out + f" {sign} {body}"
     return out
 
 
-def mono_tex(expr, gens, tex=True):
+def mono(expr, gens, tex=True):
     """단항식(분모에 문자가 올 수도 있음) -> 문자열. 예: 3x^2/y -> \\frac{3x^{2}}{y}"""
     expr = sp.simplify(expr)
     num, den = sp.fraction(sp.together(expr))
     if den.free_symbols:
-        sgn = -1 if sp.Poly(num, *gens).LC() < 0 else 1
-        n = fmt(sgn * num, gens, tex)
-        d = fmt(den, gens, tex)
-        return ("-" if sgn < 0 else "") + (f"\\frac{{{n}}}{{{d}}}" if tex else f"{n}/{d}")
+        s_ = -1 if sp.Poly(num, *gens).LC() < 0 else 1
+        n_, d_ = fmt(s_ * num, gens, tex), fmt(den, gens, tex)
+        return ("-" if s_ < 0 else "") + (f"\\frac{{{n_}}}{{{d_}}}" if tex else f"{n_}/{d_}")
     return fmt(expr, gens, tex)
 
 
-def t(expr, gens=(x, y)):
-    return fmt(expr, gens)
+def T(e, g=(x, y)):
+    return fmt(e, g)
 
 
-def p(expr, gens=(x, y)):
-    return fmt(expr, gens, tex=False)
+def Pl(e, g=(x, y)):
+    return fmt(e, g, tex=False)
 
 
-def ftex(f: F) -> str:
+def paren_t(e, g=(x, y)):
+    s = T(e, g)
+    return f"({s})" if s.startswith("-") or len(sp.Add.make_args(sp.expand(e))) > 1 else s
+
+
+def ftex(f) -> str:
     f = F(f)
     if f.denominator == 1:
         return str(f.numerator)
     return ("-" if f < 0 else "") + f"\\frac{{{abs(f.numerator)}}}{{{f.denominator}}}"
 
 
-def fpl(f: F) -> str:
+def fpl(f) -> str:
     f = F(f)
     return str(f.numerator) if f.denominator == 1 else f"{f.numerator}/{f.denominator}"
 
 
-def lin(cx, cy=0, c=0, vx="x", vy="y"):
-    """ax + by + c 를 문자열로 (정수 계수)."""
-    gens = sp.symbols(f"{vx} {vy}")
-    return fmt(cx * gens[0] + cy * gens[1] + c, gens)
+def Q(f) -> sp.Rational:
+    f = F(f)
+    return sp.Rational(f.numerator, f.denominator)
 
 
-def fx(m, k, v="x"):
-    """y = mx + k 의 오른쪽 (m, k는 Fraction)."""
-    return fmt(sp.Rational(F(m).numerator, F(m).denominator) * sp.Symbol(v) + sp.Rational(F(k).numerator, F(k).denominator), (sp.Symbol(v),))
+def lin(cx, cy=0, c=0, vx="x", vy="y", tex=True):
+    g = sp.symbols(f"{vx} {vy}")
+    return fmt(Q(cx) * g[0] + Q(cy) * g[1] + Q(c), g, tex)
+
+
+def fx(m, k, v="x", tex=True):
+    s = sp.Symbol(v)
+    return fmt(Q(m) * s + Q(k), (s,), tex)
+
+
+def factor_str(n: int) -> str:
+    """소인수분해 글자: 120 -> 2³×3×5"""
+    out = []
+    for q_, e in sorted(sp.factorint(n).items()):
+        out.append(f"{q_}{str(e).translate(SUP) if e > 1 else ''}")
+    return "×".join(out) or "1"
+
+
+def poly_wrongs(e, g, k=8):
+    """다항식 정답에서 흔한 실수 꼴을 만든다: 한 항 부호 바꾸기, 한 계수 ±1·×2, 전체 부호."""
+    e = sp.expand(e)
+    terms = sp.Add.make_args(e)
+    out = [sp.expand(-e)]
+    for t_ in terms:
+        out += [sp.expand(e - 2 * t_), sp.expand(e + t_), sp.expand(e - t_ + t_ / 2) if t_.is_Number is False else sp.expand(e + 1)]
+        c_ = t_.as_coeff_Mul()[1]
+        out += [sp.expand(e + c_), sp.expand(e - c_)]
+    out = [w for w in dict.fromkeys(out) if sp.expand(w - e) != 0 and w != 0]
+    R.shuffle(out)
+    return out
+
+
+def mono_wrongs(e, g):
+    """단항식 정답에서 흔한 실수 꼴: 부호, 계수, 지수 하나 ±1."""
+    e = sp.simplify(e)
+    out = [-e, 2 * e, e / 2 if e.as_coeff_Mul()[0] % 2 == 0 else 3 * e]
+    for v in g:
+        if e.has(v):
+            out += [e * v, e / v]
+    out = [sp.simplify(w) for w in out]
+    out = [w for w in dict.fromkeys(out) if sp.simplify(w - e) != 0]
+    R.shuffle(out)
+    return out
+
+
+def poly_mc(right, g, extra=()):
+    return mc(f"${fmt(right, g)}$", [f"${fmt(w, g)}$" for w in list(extra) + poly_wrongs(right, g) if sp.expand(w - right) != 0])
+
+
+def mono_mc(right, g, extra=()):
+    return mc(f"${mono(right, g)}$", [f"${mono(w, g)}$" for w in list(extra) + mono_wrongs(right, g) if sp.simplify(w - right) != 0])
 
 
 # ───────── 소수 ─────────
 
 def only25(n: int) -> bool:
-    for q in (2, 5):
-        while n % q == 0:
-            n //= q
-    return n == 1
+    return rest25(n) == 1
 
 
 def rest25(n: int) -> int:
-    for q in (2, 5):
-        while n % q == 0:
-            n //= q
+    for q_ in (2, 5):
+        while n % q_ == 0:
+            n //= q_
     return n
 
 
 def expand(fr: F):
     """양의 분수 -> (정수 부분, 순환하지 않는 부분, 순환마디)."""
-    ip, r, den = fr.numerator // fr.denominator, fr.numerator % fr.denominator, fr.denominator
+    ip, r_, den = fr.numerator // fr.denominator, fr.numerator % fr.denominator, fr.denominator
     digits, seen = [], {}
-    while r and r not in seen:
-        seen[r] = len(digits)
-        r *= 10
-        digits.append(str(r // den))
-        r %= den
-    if not r:
+    while r_ and r_ not in seen:
+        seen[r_] = len(digits)
+        r_ *= 10
+        digits.append(str(r_ // den))
+        r_ %= den
+    if not r_:
         return ip, "".join(digits), ""
-    s = seen[r]
+    s = seen[r_]
     return ip, "".join(digits[:s]), "".join(digits[s:])
 
 
 def dval(ip: int, pre: str, rep: str) -> F:
     if not rep:
         return ip + (F(int(pre), 10 ** len(pre)) if pre else 0)
-    whole = int(pre + rep)
-    cut = int(pre) if pre else 0
-    return ip + F(whole - cut, (10 ** len(rep) - 1) * 10 ** len(pre))
+    return ip + F(int(pre + rep) - (int(pre) if pre else 0), (10 ** len(rep) - 1) * 10 ** len(pre))
 
 
 def dtex(ip: int, pre: str, rep: str) -> str:
@@ -204,1174 +301,2181 @@ def digit_at(fr: F, n: int) -> str:
     return rep[(n - len(pre) - 1) % len(rep)]
 
 
+def rand_repeating(max_rep=4, max_pre=2, max_ip=3):
+    """무작위 순환소수 (정규형). (값, ip, pre, rep)"""
+    ip = R.randint(0, max_ip)
+    pre = "".join(R.choice("0123456789") for _ in range(R.randint(0, max_pre)))
+    rep = "".join(R.choice("0123456789") for _ in range(R.randint(1, max_rep)))
+    need(set(rep) != {"0"} and set(rep) != {"9"})
+    v = dval(ip, pre, rep)
+    ip2, pre2, rep2 = expand(v)
+    need(rep2 and len(rep2) <= max_rep)
+    return v, ip2, pre2, rep2
+
+
+def wrong_dots(ip, pre, rep, fr):
+    """같은 숫자를 늘어놓고 점만 잘못 찍은 꼴들 (값이 다른 것만)."""
+    digits = pre + rep * 3
+    out = []
+    for pl in range(0, len(pre) + 2):
+        for rl in range(1, len(rep) + 3):
+            if pl + rl <= len(digits):
+                cand = (digits[:pl], digits[pl:pl + rl])
+                if cand[1] and dval(ip, *cand) != fr:
+                    out.append(cand)
+    return out
+
+
 # ═════════════════════ 1. 유리수와 순환소수 ═════════════════════
 U = "1. 유리수와 순환소수"
+DEN = [6, 8, 9, 12, 14, 15, 16, 18, 20, 21, 24, 25, 28, 30, 35, 36, 40, 42, 45, 48, 50, 56, 60, 63, 66, 70, 72, 75, 80,
+       84, 88, 90, 96, 105, 110, 120, 125, 140, 150, 160, 200, 250]
 
-for want in (True, False):  # 유한소수와 무한소수 구분하기
-    opts = []
-    while len(opts) < 5:
-        d = rng.choice([6, 8, 9, 12, 14, 15, 16, 18, 20, 24, 25, 28, 30, 35, 40, 45, 48, 50, 56, 60, 75, 80])
-        n = rng.randint(1, d - 1)
-        if math.gcd(n, d) != 1 and rng.random() < 0.6:
-            pass
-        opts.append((f"$\\frac{{{n}}}{{{d}}}$", only25(F(n, d).denominator)))
-        opts = list({o[0]: o for o in opts}.values())
-        if sum(1 for o in opts if o[1] == want) > 1:
-            opts = [o for o in opts if o[1] != want] + [next(o for o in opts if o[1] == want)]
-    if sum(1 for o in opts if o[1] == want) != 1:
-        continue
-    ch, ans = pick(opts, want)
-    add(U, "유한소수와 무한소수 구분", "쉬움", f"다음 분수를 소수로 나타낼 때, {'유한소수' if want else '무한소수'}인 것은?", ans, choices=ch,
-        hint="기약분수로 만든 뒤 분모의 소인수가 2와 5뿐이면 유한소수예요.",
-        explanation="각 분수를 기약분수로 고치고 분모를 소인수분해해서, 2와 5 말고 다른 소인수가 있는지 봐요.",
-        steps=["먼저 [[기약분수]]로 고친다", "분모의 소인수가 2와 5뿐이면 [[유한소수]]"])
 
-for want in (True, False):  # 순환소수 표현하기 (1): 점 찍는 자리
-    truth = []
-    used = set()
-    while len(truth) < 5:
-        d = rng.choice([3, 6, 7, 9, 11, 12, 22, 27, 33, 37, 41, 44, 55, 74, 90, 99, 111, 135, 330, 333])
-        n = rng.randint(1, 4 * d)
-        fr = F(n, d)
-        ip, pre, rep = expand(fr)
-        if not rep or fr in used:
+@kind(U, "유한소수와 무한소수 구분", 12)
+def _():
+    want = R.random() < 0.5
+    hit, miss = [], []
+    for _ in range(200):
+        d = R.choice(DEN)
+        n = R.randint(1, 2 * d)
+        if n % d == 0:
             continue
-        used.add(fr)
-        right = rng.random() < (0.35 if want else 0.75)
+        f = F(n, d)
+        (hit if only25(f.denominator) == want else miss).append((n, d))
+        if hit and len(miss) >= 4:
+            break
+    need(hit and len(miss) >= 4)
+    n, d = hit[0]
+    f = F(n, d)
+    ch, ans = mc(f"$\\frac{{{n}}}{{{d}}}$", [f"$\\frac{{{p_}}}{{{q_}}}$" for p_, q_ in miss])
+    return P("쉬움", f"다음 분수를 소수로 나타낼 때, {'유한소수' if want else '무한소수'}인 것은?", ans, choices=ch,
+             hint="기약분수로 만든 뒤 분모의 소인수가 2와 5뿐이면 유한소수, 다른 소인수가 있으면 무한소수(순환소수)예요.",
+             explanation=(f"{n}/{d} = {fpl(f)}, " if F(n, d) != f or f.numerator != n else f"{n}/{d}: ") + f"분모 {f.denominator} = {factor_str(f.denominator)} → {'2와 5뿐이라 유한소수' if want else '2·5 말고 다른 소인수가 있어 무한소수'}",
+             steps=[f"{n}/{d}를 기약분수로: [[{fpl(f)}]]", f"분모 {f.denominator}의 소인수분해: {factor_str(f.denominator)}"])
+
+
+@kind(U, "순환소수 표현하기", 12)
+def _():
+    want = R.random() < 0.5
+    truth = []
+    for _ in range(60):
+        v, ip, pre, rep = rand_repeating(3, 2, 4)
+        right = R.random() < (0.3 if want else 0.7)
         if right:
             s = dtex(ip, pre, rep)
         else:
-            cands = []
-            digits = pre + rep * 3
-            for pl in range(0, 3):
-                for rl in range(1, 4):
-                    if pl + rl <= len(digits):
-                        cand = (digits[:pl], digits[pl:pl + rl])
-                        if dval(ip, *cand) != fr:
-                            cands.append(cand)
-            pre2, rep2 = rng.choice(cands)
-            s = dtex(ip, pre2, rep2)
+            w = wrong_dots(ip, pre, rep, v)
+            if not w:
+                continue
+            s = dtex(ip, *R.choice(w))
         long_ = dplain(ip, pre, rep, 9).replace("…", r"\cdots")
         truth.append((f"${long_} = {s}$", right))
-    if sum(1 for _, r in truth if r == want) != 1:
-        # 원하는 쪽이 하나가 되도록 다시 고른다
-        k = [i for i, (_, r) in enumerate(truth) if r == want]
-        if not k:
-            continue
-        keep = k[0]
-        truth = [truth[keep]] + [tr for i, tr in enumerate(truth) if tr[1] != want]
-        if len(truth) != 5:
-            continue
+        if sum(t_ == want for _, t_ in truth) >= 1 and sum(t_ != want for _, t_ in truth) >= 4:
+            break
     ch, ans = pick(truth, want)
-    add(U, "순환소수 표현하기", "보통", f"다음 중 순환소수의 표현이 {'옳은' if want else '옳지 않은'} 것은?", ans, choices=ch,
-        hint="되풀이되는 숫자 묶음(순환마디)의 처음과 끝 숫자 위에만 점을 찍어요.",
-        explanation="소수점 아래에서 처음으로 되풀이가 시작되는 곳부터 한 묶음을 찾아, 그 처음과 끝에 점을 찍어요.",
-        steps=["되풀이되는 묶음 = [[순환마디]]", "점은 순환마디의 [[처음]]과 끝 숫자 위에"])
+    return P("보통", f"다음 중 순환소수의 표현이 {'옳은' if want else '옳지 않은'} 것은?", ans, choices=ch,
+             hint="소수점 아래에서 처음 되풀이되는 숫자 묶음(순환마디)을 찾아, 그 처음과 끝 숫자 위에만 점을 찍어요.",
+             explanation="각 보기의 순환마디를 찾아, 점이 순환마디의 처음과 끝에 찍혔는지 확인해요.",
+             steps=["되풀이되는 묶음 = [[순환마디]]", "점은 순환마디의 처음과 [[끝]] 숫자 위에"])
 
-for n, d in [(19, 55), (41, 27), (5, 12), (13, 22)]:  # 순환소수 표현하기 (2): 분수 -> 순환소수
-    fr = F(n, d)
-    ip, pre, rep = expand(fr)
-    digits = pre + rep * 3
-    wrong = []
-    for pl in range(0, 3):
-        for rl in range(1, 4):
-            cand = (digits[:pl], digits[pl:pl + rl])
-            if dval(ip, *cand) != fr:
-                wrong.append(f"${dtex(ip, *cand)}$")
-    rng.shuffle(wrong)
-    ch, ans = mc(f"${dtex(ip, pre, rep)}$", wrong)
-    add(U, "분수를 순환소수로", "보통", f"분수 $\\frac{{{n}}}{{{d}}}$을 순환소수로 바르게 나타낸 것은?", ans, choices=ch,
-        hint="직접 나눗셈을 해서 같은 나머지가 다시 나오는 곳을 찾아요.",
-        explanation=f"{n} ÷ {d} = {dplain(ip, pre, rep)} 이므로 순환마디는 {rep}예요.",
-        steps=[f"{n} ÷ {d} = {dplain(ip, pre, rep)}", f"순환마디: [[{rep}]]"])
 
-for fr, nth in [(F(5, 7), 70), (F(5, 37), 50), (F(17, 66), 40)]:  # 소수점 아래 n번째 자리
-    ip, pre, rep = expand(fr)
-    dg = digit_at(fr, nth)
+@kind(U, "분수를 순환소수로", 12)
+def _():
+    d = R.choice([3, 6, 7, 9, 11, 12, 13, 15, 18, 22, 27, 30, 33, 37, 44, 45, 55, 66, 74, 90, 99, 111, 135, 148])
+    n = R.randint(1, 3 * d)
+    f = F(n, d)
+    need(f.denominator == d and n % d)
+    ip, pre, rep = expand(f)
+    need(rep and len(rep) <= 6)
+    ch, ans = mc(f"${dtex(ip, pre, rep)}$", [f"${dtex(ip, *w)}$" for w in wrong_dots(ip, pre, rep, f)])
+    return P("보통", f"분수 $\\frac{{{n}}}{{{d}}}$을 순환소수로 바르게 나타낸 것은?", ans, choices=ch,
+             hint="직접 나눗셈을 해서 같은 나머지가 다시 나오는 곳을 찾아요.",
+             explanation=f"{n} ÷ {d} = {dplain(ip, pre, rep, 10)} 이므로 순환마디는 {rep}예요.",
+             steps=[f"{n} ÷ {d} = {dplain(ip, pre, rep, 10)}", f"순환마디: [[{rep}]]"])
+
+
+@kind(U, "소수점 아래 n번째 자리의 숫자", 14)
+def _():
+    if R.random() < 0.5:
+        d = R.choice([7, 11, 13, 27, 37, 41, 33, 22, 74, 101])
+        n = R.randint(1, d - 1)
+        f = F(n, d)
+        need(f.denominator == d)
+        ip, pre, rep = expand(f)
+        q = f"분수 $\\frac{{{n}}}{{{d}}}$을 소수로 나타낼 때"
+    else:
+        f, ip, pre, rep = rand_repeating(4, 2, 0)
+        need(len(rep) >= 2)
+        q = f"순환소수 ${dtex(ip, pre, rep)}$에서"
+    nth = R.randint(15, 120)
+    need(nth > len(pre) + len(rep))
+    dg = digit_at(f, nth)
     k = (nth - len(pre)) % len(rep)
-    add(U, "소수점 아래 n번째 자리", "어려움",
-        f"분수 $\\frac{{{fr.numerator}}}{{{fr.denominator}}}$을 소수로 나타낼 때, 소수점 아래 {nth}번째 자리의 숫자를 구하시오.", dg,
-        hint="순환마디 숫자 개수로 나눈 나머지를 봐요. 순환하지 않는 자리가 있으면 먼저 빼요.",
-        explanation=f"{dplain(ip, pre, rep)}: 순환마디 {rep}({len(rep)}개)" + (f", 앞의 {len(pre)}자리는 빼고 셈" if pre else "") + f" → {dg}",
-        steps=[f"순환마디 {rep}: 숫자 [[{len(rep)}]]개"] + ([f"순환하지 않는 자리 {len(pre)}개를 빼면 {nth - len(pre)}번째"] if pre else [])
-        + [f"{nth - len(pre)} ÷ {len(rep)}의 나머지: [[{k}]]", f"구하는 숫자: [[{dg}]]"])
-ip, pre, rep = expand(F(24611, 99900))  # 순환소수로 주어진 꼴
-add(U, "소수점 아래 n번째 자리", "어려움", f"순환소수 ${dtex(ip, pre, rep)}$의 소수점 아래 60번째 자리의 숫자를 구하시오.",
-    digit_at(dval(ip, pre, rep), 60),
-    hint="소수점 아래 첫째 자리부터 순환하는지 먼저 봐요.",
-    explanation=f"{dplain(ip, pre, rep, 12)}: 앞의 {len(pre)}자리를 빼고 순환마디 {rep}({len(rep)}개)로 나머지를 구해요.",
-    steps=[f"순환하지 않는 자리: [[{len(pre)}]]개", f"(60 - {len(pre)}) ÷ {len(rep)}의 나머지: [[{(60 - len(pre)) % len(rep)}]]",
-           f"구하는 숫자: [[{digit_at(dval(ip, pre, rep), 60)}]]"])
+    return P("어려움", f"{q}, 소수점 아래 {nth}번째 자리의 숫자를 구하시오.", dg,
+             hint="순환마디의 숫자 개수로 나눈 나머지를 봐요. 순환하지 않는 자리가 있으면 그만큼 먼저 빼요.",
+             explanation=f"{dplain(ip, pre, rep, 12)}: 순환마디 {rep} ({len(rep)}개)" + (f", 앞의 {len(pre)}자리는 빼고 셈" if pre else "")
+             + (f" → ({nth} - {len(pre)}) ÷ {len(rep)}" if pre else f" → {nth} ÷ {len(rep)}") + f"의 나머지 {k} → {dg}",
+             steps=[f"순환마디 {rep}: 숫자 [[{len(rep)}]]개"] + ([f"순환하지 않는 자리: [[{len(pre)}]]개"] if pre else [])
+             + [f"{nth - len(pre)} ÷ {len(rep)}의 나머지: [[{k}]]", f"구하는 숫자: [[{dg}]]"])
 
-for n, d in [(9, 40), (7, 250), (11, 80)]:  # 10의 거듭제곱을 이용하여 유한소수로
-    e2, e5, dd = 0, 0, d
-    while dd % 2 == 0:
-        dd //= 2; e2 += 1
-    while dd % 5 == 0:
-        dd //= 5; e5 += 1
+
+@kind(U, "10의 거듭제곱을 이용하여 유한소수로", 12)
+def _():
+    e2, e5 = R.randint(0, 5), R.randint(0, 4)
+    d = 2 ** e2 * 5 ** e5
+    need(4 <= d <= 250 and e2 != e5)
+    n = R.randint(1, d - 1)
+    need(math.gcd(n, d) == 1)
     k = max(e2, e5)
     aa = n * 10 ** k // d
-    add(U, "10의 거듭제곱 이용", "보통",
-        f"분수 $\\frac{{{n}}}{{{d}}}$를 $\\frac{{a}}{{10^{{n}}}}$ 꼴로 나타낼 때, 자연수 $a$, $n$에 대하여 $a + n$의 가장 작은 값을 구하시오.", aa + k,
-        hint="분모를 2와 5의 거듭제곱으로 나타낸 뒤, 지수가 같아지도록 부족한 2나 5를 분모·분자에 곱해요.",
-        explanation=f"{d} = 2{str(e2).translate(SUP) if e2 != 1 else ''}×5{str(e5).translate(SUP) if e5 != 1 else ''} → {n}/{d} = {aa}/10{str(k).translate(SUP)} 이므로 a + n = {aa} + {k} = {aa + k}",
-        steps=[f"분모를 10{str(k).translate(SUP)}로 만들면 n = [[{k}]]", f"분자 a = [[{aa}]]", f"a + n = [[{aa + k}]]"])
+    if R.random() < 0.6:
+        q, ans_ = f"분수 $\\frac{{{n}}}{{{d}}}$를 $\\frac{{a}}{{10^{{n}}}}$ 꼴로 나타낼 때, 자연수 $a$, $n$에 대하여 $a + n$의 가장 작은 값을 구하시오.", aa + k
+    else:
+        q, ans_ = f"분수 $\\frac{{{n}}}{{{d}}}$를 분모가 10의 거듭제곱인 분수로 나타낼 때, 분자가 될 수 있는 가장 작은 자연수를 구하시오.", aa
+    return P("보통", q, ans_,
+             hint="분모를 2와 5의 거듭제곱으로 나타낸 뒤, 지수가 같아지도록 부족한 2나 5를 분모·분자에 곱해요.",
+             explanation=f"{d} = {factor_str(d)} → 부족한 {'5' if e2 > e5 else '2'}를 {abs(e2 - e5)}번 곱하면 {n}/{d} = {aa}/10{str(k).translate(SUP)}",
+             steps=[f"분모를 10{str(k).translate(SUP)}로: n = [[{k}]]", f"분자 a = [[{aa}]]"] + ([f"a + n = [[{aa + k}]]"] if ans_ == aa + k else []))
 
-for n, d in [(3, 2 ** 2 * 3 * 7 * 5), (7, 2 * 3 ** 2 * 5 * 7), (5, 2 ** 3 * 11 * 3)]:  # 유한소수가 되도록 미지수
-    red = F(n, d)
-    need = rest25(red.denominator)
-    assert all(not only25((red * k).denominator) for k in range(1, need)) and only25((red * need).denominator)
-    add(U, "유한소수가 되도록 미지수 정하기", "보통",
-        f"분수 $\\frac{{{n}}}{{{d}}} \\times a$를 소수로 나타내면 유한소수가 될 때, $a$의 값이 될 수 있는 가장 작은 자연수를 구하시오.", need,
-        hint="기약분수로 만든 뒤, 분모에서 2와 5가 아닌 소인수를 a가 없애 줘야 해요.",
-        explanation=f"{n}/{d} = {fpl(red)} 이고 분모 {red.denominator}에서 2·5가 아닌 부분은 {need}이므로 a는 {need}의 배수 → 가장 작은 값 {need}",
-        steps=[f"기약분수: [[{fpl(red)}]]", f"분모에서 2와 5가 아닌 부분: [[{need}]]", f"가장 작은 a = [[{need}]]"])
-for d in (2 ** 2 * 5 * 7, 2 * 3 * 5 ** 2):
-    cnt = sum(1 for k in range(10, 100) if only25(F(k, d).denominator))
-    r = rest25(d)
-    add(U, "유한소수가 되도록 미지수 정하기", "어려움",
-        f"분수 $\\frac{{a}}{{{d}}}$를 소수로 나타내면 유한소수가 될 때, $a$의 값이 될 수 있는 두 자리 자연수의 개수를 구하시오.", cnt,
-        hint="분모를 소인수분해해서 a가 무엇의 배수여야 하는지 찾아요.",
-        explanation=f"{d}에서 2·5가 아닌 소인수의 곱은 {r}이므로 a는 {r}의 배수. 두 자리 {r}의 배수는 {cnt}개",
-        steps=[f"a는 [[{r}]]의 배수", f"두 자리 자연수 중 {r}의 배수: [[{cnt}]]개"])
 
-for num, den0 in [(21, 2 ** 2), (33, 2 * 5)]:  # 순환소수가 되도록 미지수
-    pool = [3, 5, 6, 7, 9, 11, 12, 13, 14, 15, 18, 21, 22, 24, 25, 33]
+@kind(U, "유한소수가 되도록 미지수 정하기", 14)
+def _():
+    t_ = R.choice([3, 7, 9, 11, 13, 21, 33, 3, 7])
+    N = 2 ** R.randint(0, 3) * 5 ** R.randint(0, 2) * t_
+    need(12 <= N <= 700)
+    mode = R.random()
+    if mode < 0.5:
+        n = R.randint(1, N - 1)
+        red = F(n, N)
+        need(not only25(red.denominator))
+        m = rest25(red.denominator)
+        return P("보통", f"분수 $\\frac{{{n}}}{{{N}}} \\times a$를 소수로 나타내면 유한소수가 될 때, $a$의 값이 될 수 있는 가장 작은 자연수를 구하시오.", m,
+                 hint="기약분수로 만든 뒤, 분모에서 2와 5가 아닌 소인수를 a가 없애 줘야 해요.",
+                 explanation=(f"{n}/{N} = {fpl(red)}, " if red != F(n, N) or red.numerator != n else "") + f"분모 {red.denominator} = {factor_str(red.denominator)} → a는 {m}의 배수",
+                 steps=[f"기약분수: [[{fpl(red)}]]", f"분모에서 2와 5가 아닌 부분: [[{m}]]", f"가장 작은 a = [[{m}]]"])
+    lo, hi = (10, 99) if mode < 0.8 else (1, 50)
+    goods = [k for k in range(lo, hi + 1) if only25(F(k, N).denominator)]
+    need(goods)
+    if mode < 0.8:
+        return P("어려움", f"분수 $\\frac{{a}}{{{N}}}$를 소수로 나타내면 유한소수가 될 때, $a$의 값이 될 수 있는 두 자리 자연수의 개수를 구하시오.", len(goods),
+                 hint="분모를 소인수분해해서 a가 무엇의 배수여야 하는지 찾아요.",
+                 explanation=f"{N} = {factor_str(N)} → a는 {t_}의 배수, 두 자리 {t_}의 배수는 {len(goods)}개",
+                 steps=[f"a는 [[{t_}]]의 배수", f"두 자리 자연수 중 개수: [[{len(goods)}]]"])
+    return P("어려움", f"분수 $\\frac{{a}}{{{N}}}$를 소수로 나타내면 유한소수가 될 때, 50 이하의 자연수 $a$ 중 가장 큰 수를 구하시오.", max(goods),
+             hint="분모를 소인수분해해서 a가 무엇의 배수여야 하는지 찾아요.",
+             explanation=f"{N} = {factor_str(N)} → a는 {t_}의 배수, 50 이하에서 가장 큰 것은 {max(goods)}",
+             steps=[f"a는 [[{t_}]]의 배수", f"가장 큰 a = [[{max(goods)}]]"])
+
+
+@kind(U, "순환소수가 되도록 미지수 정하기", 10)
+def _():
+    num = R.choice([3, 6, 7, 9, 12, 14, 18, 21, 22, 33, 35, 39, 42])
+    den0 = R.choice([2, 4, 5, 8, 10, 20])
+    pool = list(range(2, 40))
     inf = [k for k in pool if not only25(F(num, den0 * k).denominator)]
     fin = [k for k in pool if only25(F(num, den0 * k).denominator)]
-    good = rng.choice(inf)
-    ch, ans = mc(str(good), [str(k) for k in rng.sample(fin, 4)])
-    add(U, "순환소수가 되도록 미지수 정하기", "보통",
-        f"분수 $\\frac{{{num}}}{{{den0} \\times x}}$를 소수로 나타내면 순환소수가 될 때, 다음 중 $x$의 값이 될 수 있는 것은?", ans, choices=ch,
-        hint="보기마다 넣어 기약분수로 만든 뒤, 분모에 2와 5가 아닌 소인수가 남는지 봐요.",
-        explanation=f"x = {good}이면 {num}/{den0 * good} = {fpl(F(num, den0 * good))} 이고 분모에 2·5가 아닌 소인수가 남아 순환소수예요.",
-        steps=[f"x = {good}: 기약분수 [[{fpl(F(num, den0 * good))}]]", "분모에 2·5가 아닌 소인수가 남으면 [[순환소수]]"])
+    need(inf and len(fin) >= 4)
+    good = R.choice(inf)
+    ch, ans = mc(str(good), [str(k) for k in fin])
+    f = F(num, den0 * good)
+    return P("보통", f"분수 $\\frac{{{num}}}{{{den0} \\times x}}$를 소수로 나타내면 순환소수가 될 때, 다음 중 $x$의 값이 될 수 있는 것은?", ans, choices=ch,
+             hint="보기를 하나씩 넣어 기약분수로 만든 뒤, 분모에 2와 5가 아닌 소인수가 남는지 봐요.",
+             explanation=f"x = {good}이면 {num}/{den0 * good}" + (f" = {fpl(f)}" if f.numerator != num else "") + f", 분모 {factor_str(f.denominator)}에 2·5가 아닌 소인수가 남아 순환소수",
+             steps=[f"x = {good}: 기약분수 [[{fpl(f)}]]", "2·5가 아닌 소인수가 남으면 [[순환소수]]"])
 
-for ip, pre, rep in [(0, "1", "36"), (1, "", "27"), (0, "25", "3")]:  # 순환소수 -> 분수: 가장 편리한 식
+
+@kind(U, "순환소수를 분수로 (10의 거듭제곱 이용)", 12)
+def _():
+    v, ip, pre, rep = rand_repeating(3, 2, 2)
     hi, lo = 10 ** (len(pre) + len(rep)), 10 ** len(pre)
     def e(h, l):
         return f"${h if h > 1 else ''}x - {l if l > 1 else ''}x$"
-    pool = [e(h, l) for h in (10, 100, 1000, 10000) for l in (1, 10, 100) if h > l]
-    ch, ans = mc(e(hi, lo), [w for w in rng.sample(pool, len(pool)) if w != e(hi, lo)])
-    add(U, "순환소수를 분수로 (10의 거듭제곱)", "보통",
-        f"순환소수 $x = {dtex(ip, pre, rep)}$를 분수로 나타낼 때, 가장 편리한 식은?", ans, choices=ch,
-        hint="소수점 아래가 똑같이 되풀이되는 두 수를 만들어 빼면 소수 부분이 없어져요.",
-        explanation=f"{hi}x와 {lo if lo > 1 else ''}x는 소수점 아래가 같아서 빼면 정수가 돼요.",
-        steps=[f"순환마디 앞까지 옮기려면 [[{lo}]]x (1이면 x 그대로)", f"순환마디 하나 뒤까지 옮기려면 [[{hi}]]x"])
+    if R.random() < 0.6:
+        pool = [e(h, l) for h in (10, 100, 1000, 10000) for l in (1, 10, 100) if h > l]
+        ch, ans = mc(e(hi, lo), pool)
+        return P("보통", f"순환소수 $x = {dtex(ip, pre, rep)}$를 분수로 나타낼 때, 가장 편리한 식은?", ans, choices=ch,
+                 hint="소수점 아래가 똑같이 되풀이되는 두 수를 만들어 빼면 소수 부분이 없어져요.",
+                 explanation=f"{hi}x = {dplain(*expand(v * hi), 6)}, {lo if lo > 1 else ''}x = {dplain(*expand(v * lo), 6)} → 빼면 소수 부분이 없어져요.",
+                 steps=[f"순환마디 앞까지 옮기면 [[{lo}]]x", f"순환마디 하나 뒤까지 옮기면 [[{hi}]]x"])
+    diff = v * hi - v * lo
+    need(diff.denominator == 1)
+    return P("보통", f"순환소수 $x = {dtex(ip, pre, rep)}$일 때, ${hi}x - {lo if lo > 1 else ''}x$의 값을 구하시오.", int(diff),
+             hint="두 수의 소수 부분이 같아서 빼면 정수만 남아요.",
+             explanation=f"{hi}x - {lo if lo > 1 else ''}x = {int(diff)} → x = {int(diff)}/{hi - lo} = {fpl(v)}",
+             steps=[f"{hi}x = {dplain(*expand(v * hi), 6)}", f"빼면 [[{int(diff)}]]"])
 
-for ip, pre, rep in [(0, "", "48"), (0, "3", "6"), (2, "", "4"), (1, "2", "45"), (0, "", "135")]:  # 순환소수 -> 기약분수
-    v = dval(ip, pre, rep)
+
+@kind(U, "순환소수를 기약분수로", 16)
+def _():
+    v, ip, pre, rep = rand_repeating(3, 2, 3)
     whole, cut = int(str(ip) + pre + rep), int(str(ip) + pre)
     den = int("9" * len(rep) + "0" * len(pre))
-    add(U, "순환소수를 분수로", "보통" if not pre else "어려움",
-        f"순환소수 ${dtex(ip, pre, rep)}$를 기약분수로 나타내시오.", fpl(v),
-        hint="분모는 순환마디 숫자 개수만큼 9, 그 뒤에 순환하지 않는 자리 수만큼 0을 붙여요.",
-        explanation=f"({whole} - {cut}) / {den} = {whole - cut}/{den} = {fpl(v)}",
-        steps=[f"분자: {whole} - {cut} = [[{whole - cut}]]", f"분모: [[{den}]]", f"기약분수: [[{fpl(v)}]]"])
+    return P("보통" if not pre else "어려움", f"순환소수 ${dtex(ip, pre, rep)}$를 기약분수로 나타내시오.", fpl(v),
+             hint="분모는 순환마디 숫자 개수만큼 9, 그 뒤에 순환하지 않는 자리 수만큼 0. 분자는 (전체 수) - (순환하지 않는 부분)",
+             explanation=f"({whole} - {cut}) / {den} = {whole - cut}/{den}" + (f" = {fpl(v)}" if fpl(v) != f"{whole - cut}/{den}" else ""),
+             steps=[f"분자: {whole} - {cut} = [[{whole - cut}]]", f"분모: [[{den}]]", f"기약분수: [[{fpl(v)}]]"])
 
-for lo, hi, d in [(F(1, 3), F(4, 5), 35), (F(1, 6), F(3, 4), 56)]:  # 두 분수 사이 유한소수 개수
-    ks = [k for k in range(1, 4 * d) if lo < F(k, d) < hi]
+
+@kind(U, "두 분수 사이의 유한소수", 10)
+def _():
+    t_ = R.choice([3, 7, 9, 11])
+    d = 2 ** R.randint(0, 3) * 5 ** R.randint(0, 1) * t_
+    need(14 <= d <= 120)
+    lo = F(R.randint(1, 4), R.choice([3, 4, 5, 6, 8]))
+    hi = F(R.randint(2, 7), R.choice([3, 4, 5, 6, 8]))
+    need(F(1, 10) < lo < hi < 1 and hi - lo > F(1, 4))
+    ks = [k for k in range(1, d) if lo < F(k, d) < hi]
     cnt = sum(1 for k in ks if only25(F(k, d).denominator))
-    r = rest25(d)
-    add(U, "두 분수 사이의 유한소수", "어려움",
-        f"두 분수 ${ftex(lo)}$과 ${ftex(hi)}$ 사이에 있는 분수 중에서 분모가 {d}인 분수 $\\frac{{a}}{{{d}}}$를 유한소수로 나타낼 수 있는 것의 개수를 구하시오. (단, $a$는 자연수)", cnt,
-        hint=f"먼저 분모를 {d}로 통분해 a의 범위를 구하고, 유한소수가 되려면 a가 무엇의 배수인지 찾아요.",
-        explanation=f"{ks[0]} ≤ a ≤ {ks[-1]} 이고 a는 {r}의 배수 → {cnt}개",
-        steps=[f"a의 범위: [[{ks[0]}]] ≤ a ≤ [[{ks[-1]}]]", f"a는 [[{r}]]의 배수", f"개수: [[{cnt}]]"])
+    need(ks and cnt >= 1)
+    return P("어려움", f"두 분수 ${ftex(lo)}$과 ${ftex(hi)}$ 사이에 있는 분수 중에서 분모가 {d}이고 분자가 자연수인 분수 가운데, 유한소수로 나타낼 수 있는 것의 개수를 구하시오.", cnt,
+             hint=f"분모 {d}로 통분해 분자의 범위를 구하고, 유한소수가 되려면 분자가 무엇의 배수인지 찾아요.",
+             explanation=f"{ks[0]} ≤ a ≤ {ks[-1]}, {d} = {factor_str(d)} → a는 {t_}의 배수 → {cnt}개",
+             steps=[f"분자 a의 범위: [[{ks[0]}]] ≤ a ≤ [[{ks[-1]}]]", f"a는 [[{t_}]]의 배수", f"개수: [[{cnt}]]"])
 
-for ip, pre, rep in [(0, "1", "6"), (0, "", "54"), (0, "2", "7")]:  # (순환소수) × x 가 유한소수
-    v = dval(ip, pre, rep)
-    need = rest25(v.denominator)
-    assert only25((v * need).denominator) and all(not only25((v * k).denominator) for k in range(1, need))
-    add(U, "순환소수에 곱해서 유한소수 만들기", "어려움",
-        f"순환소수 ${dtex(ip, pre, rep)}$에 어떤 자연수 $x$를 곱하면 유한소수가 된다. $x$의 값이 될 수 있는 가장 작은 자연수를 구하시오.", need,
-        hint="먼저 순환소수를 기약분수로 바꿔요.",
-        explanation=f"{dplain(ip, pre, rep, 6)} = {fpl(v)}, 분모에서 2·5가 아닌 부분 {need}를 없애야 해요.",
-        steps=[f"기약분수: [[{fpl(v)}]]", f"가장 작은 x = [[{need}]]"])
 
-facts = [
+@kind(U, "순환소수에 곱해서 유한소수 만들기", 12)
+def _():
+    v, ip, pre, rep = rand_repeating(2, 2, 1)
+    m = rest25(v.denominator)
+    need(1 < m <= 99)
+    return P("어려움", f"순환소수 ${dtex(ip, pre, rep)}$에 어떤 자연수 $x$를 곱하면 유한소수가 된다. $x$의 값이 될 수 있는 가장 작은 자연수를 구하시오.", m,
+             hint="먼저 순환소수를 기약분수로 바꾸고, 분모에서 2와 5가 아닌 부분을 없애요.",
+             explanation=f"{dplain(ip, pre, rep, 6)} = {fpl(v)}, 분모 {v.denominator} = {factor_str(v.denominator)} → x = {m}",
+             steps=[f"기약분수: [[{fpl(v)}]]", f"가장 작은 x = [[{m}]]"])
+
+
+FACTS = [
     ("모든 순환소수는 유리수이다.", True), ("모든 유한소수는 유리수이다.", True),
     ("기약분수의 분모에 2와 5 이외의 소인수가 있으면 유한소수로 나타낼 수 없다.", True),
     ("정수가 아닌 유리수는 유한소수 또는 순환소수로 나타낼 수 있다.", True),
+    ("순환소수는 분수로 나타낼 수 있다.", True), ("유한소수는 분모가 10의 거듭제곱인 분수로 나타낼 수 있다.", True),
     ("무한소수는 모두 유리수이다.", False), ("순환소수 중에는 유리수가 아닌 것도 있다.", False),
-    ("분모에 3이 있는 분수는 항상 순환소수로 나타내어진다.", False),
-    ("유한소수로 나타낼 수 없는 분수는 유리수가 아니다.", False), ("$0.\\dot{9}$는 1보다 작다.", False),
+    ("분모에 3이 있는 분수는 항상 순환소수로 나타내어진다.", False), ("유한소수로 나타낼 수 없는 분수는 유리수가 아니다.", False),
+    ("$0.\\dot{9}$는 1보다 작다.", False), ("모든 무한소수는 순환소수이다.", False), ("순환소수는 모두 무리수이다.", False),
 ]
-for want in (True, False):
-    tr = [f for f in facts if f[1] == want]
-    fl = [f for f in facts if f[1] != want]
-    pick5 = [rng.choice(tr)] + rng.sample(fl, 4)
-    ch, ans = pick(pick5, want)
-    add(U, "유리수와 소수의 관계", "보통", f"다음 중 {'옳은' if want else '옳지 않은'} 것은?", ans, choices=ch,
-        hint="유한소수와 순환소수는 분수로 나타낼 수 있어요 → 유리수.",
-        explanation="정수가 아닌 유리수는 유한소수나 순환소수이고, 순환소수·유한소수는 모두 유리수예요. 순환하지 않는 무한소수는 유리수가 아니에요.",
-        steps=["유한소수, 순환소수는 모두 [[유리수]]"])
+
+
+@kind(U, "유리수와 소수의 관계", 8)
+def _():
+    want = R.random() < 0.5
+    ch, ans = pick(R.sample(FACTS, len(FACTS)), want)
+    return P("보통", f"다음 중 {'옳은' if want else '옳지 않은'} 것은?", ans, choices=ch,
+             hint="유한소수와 순환소수는 분수로 나타낼 수 있어요 → 유리수. 순환하지 않는 무한소수는 유리수가 아니에요.",
+             explanation="정수가 아닌 유리수 = 유한소수 또는 순환소수. 순환소수·유한소수는 모두 유리수예요.",
+             steps=["유한소수, 순환소수는 모두 [[유리수]]"])
+
 
 # ═════════════════════ 2. 단항식의 계산 ═════════════════════
 U = "2. 단항식의 계산"
 
 
 def law_statements():
-    """(문장, 참/거짓) 후보들: 지수법칙."""
     out = []
-    m, n = rng.randint(2, 6), rng.randint(2, 5)
-    out += [(f"$a^{{{m}}} \\times a^{{{n}}} = a^{{{m + n}}}$", True), (f"$a^{{{m}}} \\times a^{{{n}}} = a^{{{m * n}}}$", m * n == m + n)]
-    m, n = rng.randint(2, 5), rng.randint(2, 4)
-    out += [(f"$(x^{{{m}}})^{{{n}}} = x^{{{m * n}}}$", True), (f"$(x^{{{m}}})^{{{n}}} = x^{{{m + n}}}$", m * n == m + n)]
-    m, n = rng.randint(6, 10), rng.randint(2, 5)
-    out += [(f"$x^{{{m}}} \\div x^{{{n}}} = x^{{{m - n}}}$", True), (f"$x^{{{m}}} \\div x^{{{n}}} = x^{{{m // n}}}$", m // n == m - n and m % n == 0)]
-    out += [(f"$x^{{{n}}} \\div x^{{{n}}} = 0$", False), (f"$x^{{{n}}} \\div x^{{{n + 2}}} = \\frac{{1}}{{x^{{2}}}}$", True)]
-    k, m, n = rng.randint(2, 4), rng.randint(2, 4), rng.randint(2, 3)
-    out += [(f"$({k}x^{{{m}}})^{{{n}}} = {k ** n}x^{{{m * n}}}$", True), (f"$({k}x^{{{m}}})^{{{n}}} = {k}x^{{{m * n}}}$", False)]
-    m, n, k = rng.randint(2, 4), rng.randint(2, 4), rng.randint(2, 4)
-    out += [(f"$\\left(\\frac{{x^{{{m}}}}}{{y^{{{n}}}}}\\right)^{{{k}}} = \\frac{{x^{{{m * k}}}}}{{y^{{{n * k}}}}}$", True),
+    v = R.choice("axy")
+    m, n = R.randint(2, 7), R.randint(2, 6)
+    out += [(f"${v}^{{{m}}} \\times {v}^{{{n}}} = {v}^{{{m + n}}}$", True), (f"${v}^{{{m}}} \\times {v}^{{{n}}} = {v}^{{{m * n}}}$", m * n == m + n)]
+    m, n = R.randint(2, 6), R.randint(2, 5)
+    out += [(f"$({v}^{{{m}}})^{{{n}}} = {v}^{{{m * n}}}$", True), (f"$({v}^{{{m}}})^{{{n}}} = {v}^{{{m + n}}}$", m * n == m + n)]
+    m, n = R.randint(6, 12), R.randint(2, 5)
+    out += [(f"${v}^{{{m}}} \\div {v}^{{{n}}} = {v}^{{{m - n}}}$", True)]
+    if m % n == 0 and m // n != m - n:
+        out += [(f"${v}^{{{m}}} \\div {v}^{{{n}}} = {v}^{{{m // n}}}$", False)]
+    out += [(f"${v}^{{{n}}} \\div {v}^{{{n}}} = 0$", False), (f"${v}^{{{n}}} \\div {v}^{{{n}}} = 1$", True),
+            (f"${v}^{{{n}}} \\div {v}^{{{n + 2}}} = \\frac{{1}}{{{v}^{{2}}}}$", True), (f"${v}^{{{n}}} \\div {v}^{{{n + 2}}} = {v}^{{2}}$", False)]
+    k, m, n = R.randint(2, 4), R.randint(2, 4), R.randint(2, 3)
+    out += [(f"$({k}{v}^{{{m}}})^{{{n}}} = {k ** n}{v}^{{{m * n}}}$", True), (f"$({k}{v}^{{{m}}})^{{{n}}} = {k}{v}^{{{m * n}}}$", False),
+            (f"$(-{v}^{{{m}}})^{{{2 * n}}} = -{v}^{{{2 * m * n}}}$", False), (f"$(-{v}^{{{m}}})^{{{2 * n + 1}}} = -{v}^{{{m * (2 * n + 1)}}}$", True)]
+    m, n, k = R.randint(1, 4), R.randint(2, 4), R.randint(2, 4)
+    xm = "x" if m == 1 else f"x^{{{m}}}"
+    out += [(f"$\\left(\\frac{{{xm}}}{{y^{{{n}}}}}\\right)^{{{k}}} = \\frac{{x^{{{m * k}}}}}{{y^{{{n * k}}}}}$", True),
+            (f"$\\left(\\frac{{{xm}}}{{y^{{{n}}}}}\\right)^{{{k}}} = \\frac{{x^{{{m * k}}}}}{{y^{{{n}}}}}$", False),
             (f"$\\left(-\\frac{{a}}{{b^{{{n}}}}}\\right)^{{{2 * k}}} = -\\frac{{a^{{{2 * k}}}}}{{b^{{{2 * k * n}}}}}$", False)]
-    return out
+    return [(t_.replace("^{1}", ""), v_) for t_, v_ in out]
 
 
-for want in (True, False, True):  # 지수법칙 옳은 것/옳지 않은 것
-    st = [s for s in law_statements()]
-    tr = [s for s in st if s[1] == want]
-    fl = [s for s in st if s[1] != want]
-    if not tr or len(fl) < 4:
-        continue
-    ch, ans = pick([rng.choice(tr)] + rng.sample(fl, 4), want)
-    add(U, "지수법칙", "보통", f"다음 중 {'옳은' if want else '옳지 않은'} 것은?", ans, choices=ch,
-        hint="곱하면 지수를 더하고, 거듭제곱의 거듭제곱은 지수를 곱하고, 나누면 지수를 빼요.",
-        explanation="aᵐ×aⁿ = aᵐ⁺ⁿ, (aᵐ)ⁿ = aᵐⁿ, aᵐ÷aⁿ = aᵐ⁻ⁿ (m>n), (ab)ⁿ = aⁿbⁿ 를 하나씩 확인해요.",
-        steps=["곱셈: 지수를 [[더한다]]", "거듭제곱의 거듭제곱: 지수를 [[곱한다]]"])
+@kind(U, "지수법칙", 14)
+def _():
+    want = R.random() < 0.5
+    ch, ans = pick(law_statements(), want)
+    return P("보통", f"다음 중 {'옳은' if want else '옳지 않은'} 것은?", ans, choices=ch,
+             hint="곱하면 지수를 더하고, 거듭제곱의 거듭제곱은 지수를 곱하고, 나누면 지수를 빼요. 음수의 짝수 제곱은 양수!",
+             explanation="aᵐ×aⁿ = aᵐ⁺ⁿ, (aᵐ)ⁿ = aᵐⁿ, aᵐ÷aⁿ = aᵐ⁻ⁿ (m>n), aⁿ÷aⁿ = 1, (ab)ⁿ = aⁿbⁿ 를 하나씩 확인해요.",
+             steps=["곱셈: 지수를 [[더한다]]", "거듭제곱의 거듭제곱: 지수를 [[곱한다]]"])
 
-for base, terms in [(3, [(27, 2), (9, 3), (81, -1)]), (2, [(8, 3), (16, 2), (4, -3)]), (5, [(25, 3), (125, 1), (5, -2)])]:  # 지수의 합과 차
-    lg = {base ** k: k for k in range(1, 6)}
+
+@kind(U, "지수법칙: 지수의 합과 차", 14)
+def _():
+    base = R.choice([2, 3, 5])
+    lg = {base ** k: k for k in range(1, 6) if base ** k <= 625}
+    nums = list(lg)
+    terms = [(R.choice(nums), R.randint(1, 4))]
+    for _ in range(R.randint(1, 2)):
+        terms.append((R.choice(nums), R.choice([1, 2, 3, -1, -2, -3])))
     tot = sum(lg[b0] * e for b0, e in terms)
+    need(tot > 0 and len({b0 for b0, _ in terms}) >= 2)
     s = f"{terms[0][0]}^{{{terms[0][1]}}}"
     for b0, e in terms[1:]:
-        s += (f" \\times {b0}^{{{e}}}" if e > 0 else f" \\div {b0}^{{{-e}}}")
-    add(U, "지수의 합과 차", "보통", f"${s} = {base}^{{x}}$일 때, 자연수 $x$의 값을 구하시오.", tot,
-        hint=f"모든 수를 {base}의 거듭제곱으로 바꾼 뒤 지수끼리 더하고 빼요.",
-        explanation=" , ".join(f"{b0} = {base}{str(lg[b0]).translate(SUP)}" for b0, _ in terms) + f" → x = {tot}",
-        steps=[f"{b0}{str(abs(e)).translate(SUP)} = {base}^[[{lg[b0] * abs(e)}]]" for b0, e in terms] + [f"x = [[{tot}]]"])
+        s += f" \\times {b0}^{{{e}}}" if e > 0 else f" \\div {b0}^{{{-e}}}"
+    s = s.replace("^{1}", "")
+    return P("보통", f"${s} = {base}^{{x}}$일 때, 자연수 $x$의 값을 구하시오.", tot,
+             hint=f"모든 수를 {base}의 거듭제곱으로 바꾼 뒤, 곱하면 지수를 더하고 나누면 빼요.",
+             explanation=", ".join(f"{b0} = {base}{str(lg[b0]).translate(SUP) if lg[b0] > 1 else ''}" for b0 in dict.fromkeys(b0 for b0, _ in terms)) + f" → x = {tot}",
+             steps=[f"{b0}{str(abs(e)).translate(SUP) if abs(e) > 1 else ''} = {base}^[[{lg[b0] * abs(e)}]]" for b0, e in terms] + [f"x = [[{tot}]]"])
 
-for k, m, n in [(4, 3, 3), (2, 3, 5), (3, 2, 4)]:  # 지수의 분배: (kx^m)^n = Kx^M -> 문자
-    add(U, "지수의 분배", "보통",
-        f"$({k}x^{{a}})^{{{n}}} = {k ** n}x^{{{m * n}}}$일 때, 자연수 $a$의 값을 구하시오.", m,
-        hint="(kxᵃ)ⁿ = kⁿ xᵃⁿ 이에요.", explanation=f"{k}{str(n).translate(SUP)} = {k ** n}, x의 지수 a × {n} = {m * n} → a = {m}",
-        steps=[f"x의 지수: a × {n} = [[{m * n}]]", f"a = [[{m}]]"])
-for c, m, n, k in [(2, 1, 3, 2), (3, 2, 1, 3)]:
-    expr = (-sp.Rational(c) * y ** m / (sp.Rational(c + 1) * x)) ** k
-    expr = expr ** 2
-    right = mono_tex(sp.expand(expr), (x, y))
-    sign_wrong = mono_tex(-sp.expand(expr), (x, y))
-    w2 = mono_tex(sp.expand(((sp.Rational(c) * y ** m / (sp.Rational(c + 1) * x)) ** (k + 1)) ** 2), (x, y))
-    w3 = mono_tex(sp.expand(sp.Rational(c) ** (2 * k) * y ** (2 * m * k) / ((c + 1) * x ** (2 * k))), (x, y))
-    w4 = mono_tex(sp.expand(sp.Rational(c) * y ** (m * k * 2) / (sp.Rational(c + 1) * x ** (2 * k))), (x, y))
-    ch, ans = mc(f"${right}$", [f"${sign_wrong}$", f"${w2}$", f"${w3}$", f"${w4}$"])
-    inner = f"\\left(-\\frac{{{c}{'y' if m == 1 else f'y^{{{m}}}'}}}{{{c + 1}x}}\\right)^{{{k}}}"
-    add(U, "지수의 분배", "어려움", f"$\\left\\{{{inner}\\right\\}}^{{2}}$을 간단히 하면?", ans, choices=ch,
-        hint="안쪽부터 차례로: 분자·분모에 각각 지수를 분배하고, 음수의 짝수 제곱은 양수예요.",
-        explanation=f"지수를 곱하면 {k}×2 = {2 * k}제곱, 짝수 제곱이라 부호는 +",
-        steps=[f"전체 지수: {k} × 2 = [[{2 * k}]]", "부호: [[+]]"])
 
-for base, k, e in [(3, 3, 7), (2, 4, 6), (5, 5, 2)]:  # 거듭제곱의 합
+@kind(U, "지수법칙: 지수의 분배", 14)
+def _():
+    mode = R.random()
+    if mode < 0.55:
+        k, m, n = R.randint(2, 5), R.randint(2, 5), R.randint(2, 4)
+        need(k ** n <= 1024)
+        c = R.randint(1, 4)
+        yc = "y" if c == 1 else f"y^{{{c}}}"
+        q = f"$({k}x^{{a}}{yc})^{{b}} = {k ** n}x^{{{m * n}}}y^{{c}}$일 때, 자연수 $a$, $b$, $c$에 대하여 $a + b + c$의 값을 구하시오."
+        return P("보통", q, m + n + c * n,
+                 hint=f"계수: {k}의 몇 제곱이 {k ** n}인지 먼저 찾아 b를 구해요.",
+                 explanation=f"{k}^b = {k ** n} → b = {n}, a × {n} = {m * n} → a = {m}, c = {c} × {n} = {c * n} → 합 {m + n + c * n}",
+                 steps=[f"b = [[{n}]]", f"a = [[{m}]]", f"c = [[{c * n}]]", f"a + b + c = [[{m + n + c * n}]]"])
+    c, m, k = R.randint(2, 4), R.randint(1, 3), R.randint(2, 3)
+    inner = (-Q(c) * y ** m / ((c + 1) * x)) ** k
+    right = sp.simplify(inner ** 2)
+    ch, ans = mono_mc(right, (x, y), [-right, sp.simplify(inner * 2), sp.simplify(Q(c) ** (2 * k) * y ** (2 * m * k) / ((c + 1) * x ** (2 * k)))])
+    ym = "y" if m == 1 else f"y^{{{m}}}"
+    return P("어려움", f"$\\left\\{{\\left(-\\frac{{{c}{ym}}}{{{c + 1}x}}\\right)^{{{k}}}\\right\\}}^{{2}}$을 간단히 하면?", ans, choices=ch,
+             hint="분자·분모에 각각 지수를 분배하고, 음수의 짝수 제곱은 양수예요.",
+             explanation=f"전체 지수 {k}×2 = {2 * k}, 짝수 제곱이라 부호 + → {mono(right, (x, y), False)}",
+             steps=[f"전체 지수: [[{2 * k}]]", "부호: [[+]]"])
+
+
+@kind(U, "거듭제곱의 합", 12)
+def _():
+    base = R.choice([2, 3, 4, 5])
+    e = R.randint(2, 9)
+    mode = R.random()
+    if base == 2 and mode < 0.5:
+        k = R.choice([2, 4, 8])
+        lg = int(math.log2(k))
+        s = " + ".join([f"2^{{{e}}}"] * k)
+        return P("보통", f"${s}$을 2의 거듭제곱으로 나타내면 $2^{{\\square}}$이다. $\\square$ 안에 알맞은 수를 구하시오.", e + lg,
+                 hint="같은 수를 여러 번 더하면 곱셈이에요. 더한 개수도 2의 거듭제곱으로 바꿔요.",
+                 explanation=f"{k} × 2{str(e).translate(SUP)} = 2{str(lg).translate(SUP)} × 2{str(e).translate(SUP)} = 2{str(e + lg).translate(SUP)}",
+                 steps=[f"{k}개 → {k} = 2^[[{lg}]]", f"2^{lg} × 2^{e} = 2^[[{e + lg}]]"])
+    if base in (2, 3) and mode < 0.8:
+        k1 = base
+        top = R.randint(4, 9)
+        b2 = base ** 2
+        e2 = R.randint(2, 3)
+        res = (top + 1) - (2 * e2 + 1)
+        need(res >= 1)
+        s1 = " + ".join([f"{base}^{{{top}}}"] * k1)
+        s2 = " + ".join([f"{b2}^{{{e2}}}"] * k1)
+        return P("어려움", f"$\\frac{{{s1}}}{{{s2}}} = {base}^{{\\square}}$일 때, $\\square$ 안에 알맞은 자연수를 구하시오.", res,
+                 hint=f"분자 = {base} × {base}^{top}, 분모 = {base} × {b2}^{e2}, {b2} = {base}²",
+                 explanation=f"분자 {base}^{top + 1}, 분모 {base}^{2 * e2 + 1} → {base}^{res}",
+                 steps=[f"분자 = {base}^[[{top + 1}]]", f"분모 = {base}^[[{2 * e2 + 1}]]", f"답: [[{res}]]"])
+    k = base
     s = " + ".join([f"{base}^{{{e}}}"] * k)
-    if k == base:
-        add(U, "거듭제곱의 합", "보통", f"${s}$을 {base}의 거듭제곱으로 나타내면 ${base}^{{\\square}}$이다. $\\square$ 안에 알맞은 수를 구하시오.", e + 1,
-            hint="같은 수를 여러 번 더하면 곱셈이에요: aᵐ + aᵐ + ... (a개) = a × aᵐ",
-            explanation=f"{base}개를 더했으므로 {base} × {base}{str(e).translate(SUP)} = {base}{str(e + 1).translate(SUP)}",
-            steps=[f"{s.replace('^{', '').replace('}', '')} = {base} × {base}^{e}".replace(f"{base}{e}", f"{base}^{e}"), f"= {base}^[[{e + 1}]]"])
-    else:
-        num = sp.Integer(k) * base ** e
-        # 2^6 + 2^6 + 2^6 + 2^6 = 4 × 2^6 = 2^8
-        lg = int(math.log2(k)) if base == 2 else None
-        add(U, "거듭제곱의 합", "보통", f"${s}$을 {base}의 거듭제곱으로 나타내면 ${base}^{{\\square}}$이다. $\\square$ 안에 알맞은 수를 구하시오.", e + lg,
-            hint="같은 수를 여러 번 더하면 곱셈이에요. 그 개수도 2의 거듭제곱으로 바꿔요.",
-            explanation=f"{k} × 2{str(e).translate(SUP)} = 2{str(lg).translate(SUP)} × 2{str(e).translate(SUP)} = 2{str(e + lg).translate(SUP)}",
-            steps=[f"{k}개를 더함 → {k} = 2^[[{lg}]]", f"2^{lg} × 2^{e} = 2^[[{e + lg}]]"])
-        assert num == 2 ** (e + lg)
-add(U, "거듭제곱의 합", "어려움",
-    "$\\frac{3^{4} + 3^{4} + 3^{4}}{9^{2} + 9^{2} + 9^{2}} \\times 27 = 3^{\\square}$일 때, $\\square$ 안에 알맞은 자연수를 구하시오.", 3,
-    hint="분자 = 3 × 3⁴, 분모 = 3 × 9² = 3 × 3⁴",
-    explanation="(3×3⁴)/(3×3⁴) = 1, 1 × 27 = 3³",
-    steps=["분자 = 3^[[5]]", "분모 = 3^[[5]]", "3^[[3]]"])
-assert F(3 * 3 ** 4, 3 * 9 ** 2) * 27 == 3 ** 3
+    return P("보통", f"${s}$을 {base}의 거듭제곱으로 나타내면 ${base}^{{\\square}}$이다. $\\square$ 안에 알맞은 수를 구하시오.", e + 1,
+             hint=f"{base}^{e}를 {base}번 더하면 {base} × {base}^{e} 이에요.",
+             explanation=f"{base} × {base}{str(e).translate(SUP)} = {base}{str(e + 1).translate(SUP)}",
+             steps=[f"{base} × {base}^{e} = {base}^[[{e + 1}]]"])
 
-for base, big, k, inv in [(2, 16, 4, False), (3, 27, 3, True), (5, 125, 3, False)]:  # 문자를 사용하여 거듭제곱
-    if not inv:
-        ch, ans = mc(f"$A^{{{k}}}$", [f"$A^{{{k + 1}}}$", f"${k}A$", f"${k}A^{{{k}}}$", f"$A^{{{2 * k}}}$"])
-        add(U, "문자를 사용하여 거듭제곱 나타내기", "보통", f"${base}^{{x}} = A$라 할 때, ${big}^{{x}}$을 $A$를 사용하여 나타내면? (단, $x$는 자연수)", ans, choices=ch,
-            hint=f"{big}을 {base}의 거듭제곱으로 바꾼 뒤 지수의 순서를 바꿔요.",
-            explanation=f"{big}ˣ = ({base}{str(k).translate(SUP)})ˣ = ({base}ˣ){str(k).translate(SUP)} = A{str(k).translate(SUP)}",
-            steps=[f"{big} = {base}^[[{k}]]", f"{big}ˣ = A^[[{k}]]"])
-    else:
-        e = 5
-        # 3^5 = A 라 할 때 1/27^5 = 1/(3^15) = 1/A^3
-        ch, ans = mc(f"$\\frac{{1}}{{A^{{{k}}}}}$", [f"$\\frac{{1}}{{A^{{{k + 1}}}}}$", f"$\\frac{{1}}{{A^{{{k + 2}}}}}$", f"$\\frac{{1}}{{A^{{{3 * k}}}}}$", f"$\\frac{{1}}{{A^{{{k * e}}}}}$"])
-        add(U, "문자를 사용하여 거듭제곱 나타내기", "어려움", f"${base}^{{{e}}} = A$라 할 때, $\\frac{{1}}{{{big}^{{{e}}}}}$을 $A$를 사용하여 나타내면?", ans, choices=ch,
-            hint=f"{big}을 {base}의 거듭제곱으로 바꿔요.",
-            explanation=f"{big}{str(e).translate(SUP)} = {base}{str(k * e).translate(SUP)} = ({base}{str(e).translate(SUP)}){str(k).translate(SUP)} = A{str(k).translate(SUP)}",
-            steps=[f"{big}^{e} = {base}^[[{k * e}]]", f"= A^[[{k}]]"])
 
-for e2, e5, extra in [(7, 4, 1), (5, 8, 3), (9, 6, 9)]:  # n자리 자연수
+@kind(U, "문자를 사용하여 거듭제곱 나타내기", 12)
+def _():
+    base = R.choice([2, 3, 5])
+    k = R.randint(2, 5)
+    big = base ** k
+    need(big <= 625)
+    if R.random() < 0.5:
+        ch, ans = mc(f"$A^{{{k}}}$", [f"$A^{{{k + 1}}}$", f"${k}A$", f"${k}A^{{{k}}}$", f"$A^{{{2 * k}}}$", f"$A^{{{k - 1}}}$" if k > 2 else "$A^{5}$", f"${big}A$"])
+        return P("보통", f"${base}^{{x}} = A$라 할 때, ${big}^{{x}}$을 $A$를 사용하여 나타내면? (단, $x$는 자연수)", ans, choices=ch,
+                 hint=f"{big}을 {base}의 거듭제곱으로 바꾼 뒤 지수의 순서를 바꿔요.",
+                 explanation=f"{big}ˣ = ({base}{str(k).translate(SUP)})ˣ = ({base}ˣ){str(k).translate(SUP)} = A{str(k).translate(SUP)}",
+                 steps=[f"{big} = {base}^[[{k}]]", f"{big}ˣ = A^[[{k}]]"])
+    e = R.randint(2, 6)
+    ch, ans = mc(f"$\\frac{{1}}{{A^{{{k}}}}}$", [f"$\\frac{{1}}{{A^{{{j}}}}}$" for j in range(2, 3 * k + 2) if j != k] + [f"$A^{{{k}}}$"])
+    return P("어려움", f"${base}^{{{e}}} = A$라 할 때, $\\frac{{1}}{{{big}^{{{e}}}}}$을 $A$를 사용하여 나타내면?", ans, choices=ch,
+             hint=f"{big}을 {base}의 거듭제곱으로 바꿔요.",
+             explanation=f"{big}{str(e).translate(SUP)} = {base}{str(k * e).translate(SUP)} = ({base}{str(e).translate(SUP)}){str(k).translate(SUP)} = A{str(k).translate(SUP)}",
+             steps=[f"{big}^{e} = {base}^[[{k * e}]]", f"= A^[[{k}]]"])
+
+
+@kind(U, "n자리 자연수", 12)
+def _():
+    e2, e5 = R.randint(2, 12), R.randint(2, 12)
+    need(e2 != e5)
+    extra = R.choice([1, 1, 3, 7, 9, 11, 3 ** 2])
     N = 2 ** e2 * 5 ** e5 * extra
-    nd = len(str(N))
+    m = min(e2, e5)
+    rest = N // 10 ** m
     q = f"2^{{{e2}}} \\times 5^{{{e5}}}" + (f" \\times {extra}" if extra != 1 else "")
-    add(U, "n자리 자연수", "어려움", f"${q}$은 몇 자리 자연수인지 구하시오.", nd,
-        hint="2와 5를 같은 지수끼리 묶어 10의 거듭제곱을 만들어요.",
-        explanation=f"{N} 이므로 {nd}자리 자연수",
-        steps=[f"2와 5를 묶으면 10^[[{min(e2, e5)}]]", f"남은 수 × 10^{min(e2, e5)} = {N // 10 ** min(e2, e5)} × 10^{min(e2, e5)}",
-               f"자릿수: [[{nd}]]"])
+    return P("어려움", f"${q}$은 몇 자리 자연수인지 구하시오.", len(str(N)),
+             hint="2와 5를 같은 지수끼리 묶어 10의 거듭제곱을 만들어요.",
+             explanation=f"= {rest} × 10{str(m).translate(SUP)} → ({len(str(rest))}자리) + {m} = {len(str(N))}자리",
+             steps=[f"2와 5를 묶으면 10^[[{m}]]", f"남은 수: [[{rest}]]", f"자릿수: [[{len(str(N))}]]"])
 
-for (c1, a1, b1, k1), (c2, a2, b2), (c3, a3, b3) in [((-3, 1, 2, 2), (2, 3, 1), (F(-1, 6), 2, 3)),  # (단항식)×(단항식)
-                                                    ((2, 2, 1, 3), (-3, 1, 2), (F(1, 12), 4, 3))]:
-    e = (sp.Rational(c1) * x ** a1 * y ** b1) ** k1 * (c2 * x ** a2 * y ** b2) * (sp.Rational(c3.numerator, c3.denominator) * x ** a3 * y ** b3)
-    e = sp.expand(e)
-    # 분모에 들어가는 항을 만들기 위해 세 번째를 1/(...) 꼴로 쓴다
-    third = f"\\left({'-' if c3 < 0 else ''}\\frac{{1}}{{{abs(c3.denominator)}x^{{{a3}}}y^{{{b3}}}}}\\right)"
-    e = sp.expand((sp.Rational(c1) * x ** a1 * y ** b1) ** k1 * (c2 * x ** a2 * y ** b2) * (sp.Rational(c3.numerator, c3.denominator) / (x ** a3 * y ** b3)))
-    A = sp.Poly(e, x, y).LC() if e.is_polynomial(x, y) else None
-    num, den = sp.fraction(sp.together(e))
-    assert not den.free_symbols, e
+
+@kind(U, "(단항식)×(단항식)", 14)
+def _():
+    c1, a1, b1, k1 = nz(-3, 3, (0, 1)), R.randint(1, 3), R.randint(1, 3), R.randint(2, 3)
+    c2, a2, b2 = nz(-6, 6), R.randint(0, 3), R.randint(1, 4)
+    d3, a3, b3 = R.randint(2, 30), R.randint(1, 6), R.randint(1, 6)
+    s3 = R.choice([1, -1])
+    e = sp.expand((c1 * x ** a1 * y ** b1) ** k1 * (c2 * x ** a2 * y ** b2) * s3 / (d3 * x ** a3 * y ** b3))
+    need(e.is_polynomial(x, y) and e != 0)
     (mon, coef), = sp.Poly(e, x, y).terms()
     B, C = mon
-    add(U, "(단항식)×(단항식)", "어려움",
-        f"$({t(sp.Rational(c1) * x ** a1 * y ** b1)})^{{{k1}}} \\times {('(' + t(c2 * x ** a2 * y ** b2) + ')') if c2 < 0 else t(c2 * x ** a2 * y ** b2)} \\times {third} = Ax^{{B}}y^{{C}}$일 때, $A + B + C$의 값을 구하시오. (단, $B$, $C$는 자연수)",
-        int(coef) + B + C,
-        hint="부호 → 계수 → 문자 순서로 따로 계산해요.",
-        explanation=f"간단히 하면 {p(e)} 이므로 A = {coef}, B = {B}, C = {C}",
-        steps=[f"A = [[{coef}]]", f"B = [[{B}]]", f"C = [[{C}]]", f"A + B + C = [[{int(coef) + B + C}]]"])
+    need(B >= 1 and C >= 1 and coef.is_integer and abs(coef) <= 60)
+    second = paren_t(c2 * x ** a2 * y ** b2)
+    third = f"\\left({'-' if s3 < 0 else ''}\\frac{{1}}{{{T(d3 * x ** a3 * y ** b3)}}}\\right)"
+    if R.random() < 0.6:
+        return P("어려움", f"$({T(c1 * x ** a1 * y ** b1)})^{{{k1}}} \\times {second} \\times {third} = Ax^{{B}}y^{{C}}$일 때, $A + B + C$의 값을 구하시오. (단, $A$는 수, $B$, $C$는 자연수)",
+                 int(coef) + B + C, hint="부호 → 계수 → 문자 순서로 따로 계산해요.",
+                 explanation=f"간단히 하면 {Pl(e)} → A = {coef}, B = {B}, C = {C}",
+                 steps=[f"A = [[{coef}]]", f"B = [[{B}]]", f"C = [[{C}]]", f"A + B + C = [[{int(coef) + B + C}]]"])
+    ch, ans = mono_mc(e, (x, y))
+    return P("보통", f"$({T(c1 * x ** a1 * y ** b1)})^{{{k1}}} \\times {second} \\times {third}$를 간단히 하면?", ans, choices=ch,
+             hint="거듭제곱을 먼저 하고, 계수끼리·문자끼리 따로 계산해요.", explanation=f"간단히 하면 {Pl(e)}",
+             steps=[f"({Pl(c1 * x ** a1 * y ** b1)})^{k1} = {Pl((c1 * x ** a1 * y ** b1) ** k1)}", f"결과: {Pl(e)}"])
 
-for (c, m, n, k), (dc, dm, dn) in [((2, 2, 3, 3), (F(4, 5), 3, 2)), ((3, 1, 2, 2), (F(3, 2), 1, 3))]:  # (단항식)÷(단항식)
-    num_ = (c * a ** m * b ** n) ** k
-    res = sp.expand(num_ / (sp.Rational(dc.numerator, dc.denominator) * a ** dm * b ** dn))
+
+@kind(U, "(단항식)÷(단항식)", 14)
+def _():
+    c, m, n, k = R.randint(2, 4), R.randint(1, 3), R.randint(1, 3), R.randint(2, 3)
+    dc = F(R.randint(1, 9), R.randint(1, 6))
+    dm, dn = R.randint(1, m * k), R.randint(0, n * k)
+    res = sp.expand((c * a ** m * b ** n) ** k / (Q(dc) * a ** dm * b ** dn))
+    need(res.is_polynomial(a, b))
     (mon, coef), = sp.Poly(res, a, b).terms()
-    add(U, "(단항식)÷(단항식)", "보통",
-        f"$({t(c * a ** m * b ** n, (a, b))})^{{{k}}} \\div {ftex(dc)}{t(a ** dm * b ** dn, (a, b))} = {coef}a^{{x}}b^{{y}}$일 때, 자연수 $x$, $y$에 대하여 $x + y$의 값을 구하시오.",
-        mon[0] + mon[1],
-        hint="분수로 나누는 것은 역수를 곱하는 것과 같아요.",
-        explanation=f"간단히 하면 {p(res, (a, b))} → x = {mon[0]}, y = {mon[1]}",
-        steps=[f"({c}a^{m}b^{n})^{k} = {p(num_, (a, b))}", f"x = [[{mon[0]}]]", f"y = [[{mon[1]}]]", f"x + y = [[{mon[0] + mon[1]}]]"])
+    need(coef.is_integer and 1 < abs(coef) <= 100 and mon[0] >= 1 and mon[1] >= 1 and dc.denominator > 1)
+    dtx = ftex(dc) + T(a ** dm * b ** dn, (a, b))
+    if R.random() < 0.6:
+        return P("보통", f"$({T(c * a ** m * b ** n, (a, b))})^{{{k}}} \\div {dtx} = {coef}a^{{x}}b^{{y}}$일 때, 자연수 $x$, $y$에 대하여 $x + y$의 값을 구하시오.",
+                 mon[0] + mon[1], hint="분수로 나누는 것은 역수를 곱하는 것과 같아요.",
+                 explanation=f"({Pl(c * a ** m * b ** n, (a, b))})^{k} = {Pl((c * a ** m * b ** n) ** k, (a, b))}, ÷ {fpl(dc)}{Pl(a ** dm * b ** dn, (a, b))} → {Pl(res, (a, b))}",
+                 steps=[f"x = [[{mon[0]}]]", f"y = [[{mon[1]}]]", f"x + y = [[{mon[0] + mon[1]}]]"])
+    ch, ans = mono_mc(res, (a, b))
+    return P("보통", f"$({T(c * a ** m * b ** n, (a, b))})^{{{k}}} \\div {dtx}$를 계산하면?", ans, choices=ch,
+             hint="나눗셈은 역수의 곱셈으로 바꿔요: ÷ (p/q)A = × q/(pA)", explanation=f"계산하면 {Pl(res, (a, b))}",
+             steps=[f"({Pl(c * a ** m * b ** n, (a, b))})^{k} = {Pl((c * a ** m * b ** n) ** k, (a, b))}", f"결과: {Pl(res, (a, b))}"])
 
-for (c1, a1, k1), (c2, a2, b2, k2), (dc, da, db) in [((-3, 2, 1), (1, 1, 2, 3), (F(1, 2), 2, 1)),  # 혼합 계산
-                                                    ((2, 1, 2), (-1, 2, 1, 3), (F(2, 3), 3, 2))]:
-    e1 = (sp.Rational(c1) * x ** a1) ** k1
-    e2 = (sp.Rational(c2) * x ** a2 * y ** b2) ** k2
-    d = sp.Rational(dc.numerator, dc.denominator) * x ** da * y ** db
-    res = sp.expand(e1 * e2 / d)
-    wrong = [sp.expand(-res), sp.expand(e1 * e2 * d), sp.expand(res * x), sp.expand(res / y), sp.expand(res * 2)]
-    ch, ans = mc(f"${mono_tex(res, (x, y))}$", [f"${mono_tex(w, (x, y))}$" for w in wrong])
-    q = (f"$({t(sp.Rational(c1) * x ** a1)})" + (f"^{{{k1}}}" if k1 > 1 else "") + f" \\times ({t(sp.Rational(c2) * x ** a2 * y ** b2)})^{{{k2}}} \\div {ftex(dc)}{t(x ** da * y ** db)}$을 계산하면?")
-    add(U, "곱셈과 나눗셈의 혼합 계산", "보통", q, ans, choices=ch,
-        hint="거듭제곱을 먼저 하고, 나눗셈은 역수의 곱셈으로 바꿔요.",
-        explanation=f"계산하면 {p(res)}",
-        steps=[f"({p(sp.Rational(c2) * x ** a2 * y ** b2)})^{k2} = {p(e2)}", f"결과: {p(res)}"])
 
-for left, box, div, right in [((24, 2, 0), (F(2), 2, 1), (12, 3, 1), None), ((5, 1, 2), (F(3), 2, 0), (15, 2, 1), None)]:  # □ 안에 알맞은 식
-    L = left[0] * a ** left[1] * b ** left[2]
-    BX = sp.Rational(box[0].numerator, box[0].denominator) * a ** box[1] * b ** box[2]
-    D = div[0] * a ** div[1] * b ** div[2]
-    R = sp.expand(L * BX / D)
-    wrong = [sp.expand(BX * a), sp.expand(BX / a) if box[1] else sp.expand(BX * b), sp.expand(BX * 2), sp.expand(-BX), sp.expand(BX * b)]
-    wrong = [w for w in wrong if w != BX]
-    ch, ans = mc(f"${t(BX, (a, b))}$", [f"${mono_tex(w, (a, b))}$" for w in wrong])
-    add(U, "□ 안에 알맞은 식", "보통",
-        f"${t(L, (a, b))} \\times \\square \\div {t(D, (a, b))} = {mono_tex(R, (a, b))}$일 때, $\\square$ 안에 알맞은 식은?", ans, choices=ch,
-        hint="□ = (오른쪽) × (나눈 식) ÷ (곱한 식) 으로 거꾸로 계산해요.",
-        explanation=f"□ = {p(R, (a, b))} × {p(D, (a, b))} ÷ {p(L, (a, b))} = {p(BX, (a, b))}",
-        steps=[f"□ = ({p(R, (a, b))}) × ({p(D, (a, b))}) ÷ ({p(L, (a, b))})", f"□ = {p(BX, (a, b))}"])
+@kind(U, "곱셈과 나눗셈의 혼합 계산", 14)
+def _():
+    c1, a1, k1 = nz(-4, 4), R.randint(1, 3), R.randint(1, 2)
+    c2, a2, b2, k2 = nz(-3, 3), R.randint(1, 2), R.randint(1, 2), R.randint(2, 3)
+    dc = F(R.randint(1, 4), R.randint(1, 4))
+    da, db = R.randint(1, 4), R.randint(1, 3)
+    e1, e2 = (c1 * x ** a1) ** k1, (c2 * x ** a2 * y ** b2) ** k2
+    res = sp.expand(e1 * e2 / (Q(dc) * x ** da * y ** db))
+    need(res.is_polynomial(x, y))
+    (mon, coef), = sp.Poly(res, x, y).terms()
+    need(coef.is_integer and abs(coef) <= 200 and mon[0] >= 1 and mon[1] >= 1)
+    ch, ans = mono_mc(res, (x, y), [sp.expand(e1 * e2 * Q(dc) * x ** da * y ** db)])
+    q = f"$({T(c1 * x ** a1)})" + (f"^{{{k1}}}" if k1 > 1 else "") + f" \\times ({T(c2 * x ** a2 * y ** b2)})^{{{k2}}} \\div {ftex(dc) if dc != 1 else ''}{T(x ** da * y ** db)}$을 계산하면?"
+    return P("보통", q, ans, choices=ch, hint="거듭제곱을 먼저 하고, 나눗셈은 역수의 곱셈으로 바꿔요.",
+             explanation=f"계산하면 {Pl(res)}", steps=[f"({Pl(c2 * x ** a2 * y ** b2)})^{k2} = {Pl(e2)}", f"결과: {Pl(res)}"])
 
-base_, area = 4 * x * y ** 2, 20 * x ** 3 * y ** 5  # 도형에의 활용
-h = sp.expand(area / base_)
-ch, ans = mc(f"${t(h)}$", [f"${t(sp.expand(h * x))}$", f"${t(sp.expand(h / y))}$", f"${t(sp.expand(2 * h))}$", f"${t(sp.expand(h * y))}$"])
-add(U, "도형에의 활용", "보통", f"밑변의 길이가 ${t(base_)}$인 평행사변형의 넓이가 ${t(area)}$일 때, 이 평행사변형의 높이는?", ans, choices=ch,
-    hint="평행사변형의 넓이 = 밑변 × 높이", explanation=f"높이 = {p(area)} ÷ {p(base_)} = {p(h)}",
-    steps=[f"높이 = {p(area)} ÷ {p(base_)}", f"= {p(h)}"])
-w_, l_, vol = 2 * a * b, 3 * a ** 2, 18 * a ** 4 * b ** 3
-hh = sp.expand(vol / (w_ * l_))
-ch, ans = mc(f"${t(hh, (a, b))}$", [f"${t(sp.expand(hh * a), (a, b))}$", f"${t(sp.expand(hh * 2), (a, b))}$", f"${t(sp.expand(hh / b), (a, b))}$", f"${t(sp.expand(hh * 3), (a, b))}$"])
-add(U, "도형에의 활용", "보통", f"가로의 길이가 ${t(w_, (a, b))}$, 세로의 길이가 ${t(l_, (a, b))}$인 직육면체의 부피가 ${t(vol, (a, b))}$일 때, 이 직육면체의 높이는?", ans, choices=ch,
-    hint="직육면체의 부피 = 가로 × 세로 × 높이", explanation=f"높이 = {p(vol, (a, b))} ÷ ({p(w_, (a, b))} × {p(l_, (a, b))}) = {p(hh, (a, b))}",
-    steps=[f"가로 × 세로 = {p(w_ * l_, (a, b))}", f"높이 = {p(hh, (a, b))}"])
 
-for X, Y in [(2 * b / a, 6 * a ** 3 * b ** 2), (-3 * x / y ** 2, F(2, 3))]:  # 잘못 계산한 식
-    if isinstance(Y, F):
-        Y = sp.Rational(2, 3) * x * y ** 3
-        gens = (x, y)
+@kind(U, "□ 안에 알맞은 식 (단항식)", 12)
+def _():
+    L = R.randint(2, 12) * a ** R.randint(1, 3) * b ** R.randint(0, 2)
+    BX = nz(-6, 6) * a ** R.randint(0, 3) * b ** R.randint(0, 3)
+    need(BX.free_symbols)
+    D = R.randint(2, 12) * a ** R.randint(1, 3) * b ** R.randint(0, 2)
+    Rr = sp.simplify(L * BX / D)
+    need(sp.fraction(sp.together(Rr))[1] == 1)
+    if R.random() < 0.5:
+        q = f"${T(L, (a, b))} \\times \\square \\div {T(D, (a, b))} = {mono(Rr, (a, b))}$일 때, $\\square$ 안에 알맞은 식은?"
+        ex = f"□ = {mono(Rr, (a, b), False)} × {Pl(D, (a, b))} ÷ {Pl(L, (a, b))} = {mono(BX, (a, b), False)}"
     else:
-        gens = (a, b)
-    A_ = sp.expand(Y * X)
-    right = sp.expand(A_ * X)
-    wrong = [sp.expand(A_ / X), sp.expand(Y), sp.expand(-right), sp.expand(right * gens[0]), sp.expand(right / gens[1])]
-    ch, ans = mc(f"${mono_tex(right, gens)}$", [f"${mono_tex(w, gens)}$" for w in wrong if sp.simplify(w - right) != 0])
-    add(U, "잘못 계산한 식 바로잡기", "어려움",
-        f"어떤 식에 ${mono_tex(X, gens)}$를 곱해야 할 것을 잘못하여 나누었더니 ${mono_tex(Y, gens)}$가 되었다. 바르게 계산한 식은?", ans, choices=ch,
-        hint="먼저 어떤 식 A를 구해요: A ÷ X = Y 이므로 A = Y × X",
-        explanation=f"A = {mono_tex(Y, gens, False)} × {mono_tex(X, gens, False)} = {mono_tex(A_, gens, False)}, 바른 계산 A × X = {mono_tex(right, gens, False)}",
-        steps=[f"어떤 식 A = {mono_tex(A_, gens, False)}", f"바른 계산: {mono_tex(right, gens, False)}"])
+        q = f"$\\square \\div {T(D, (a, b))} \\times {T(L, (a, b))} = {mono(Rr, (a, b))}$일 때, $\\square$ 안에 알맞은 식은?"
+        ex = f"□ = {mono(Rr, (a, b), False)} ÷ {Pl(L, (a, b))} × {Pl(D, (a, b))} = {mono(BX, (a, b), False)}"
+    ch, ans = mono_mc(BX, (a, b))
+    return P("보통", q, ans, choices=ch, hint="□를 남기고 나머지를 반대 연산으로 넘겨요: 곱한 것은 나누고, 나눈 것은 곱해요.",
+             explanation=ex, steps=[f"□ = {mono(BX, (a, b), False)}"])
+
+
+@kind(U, "단항식: 도형에의 활용", 12)
+def _():
+    mode = R.choice(["para", "rect", "cuboid", "tri", "prism"])
+    g = (a, b) if R.random() < 0.5 else (x, y)
+    u, v = g
+    m1 = R.randint(1, 6) * u ** R.randint(1, 2) * v ** R.randint(0, 2)
+    m2 = R.randint(1, 6) * u ** R.randint(0, 2) * v ** R.randint(1, 3)
+    if mode == "para":
+        q = f"밑변의 길이가 ${T(m1, g)}$인 평행사변형의 넓이가 ${T(m1 * m2, g)}$일 때, 이 평행사변형의 높이는?"
+        ans_, ex, hint = m2, f"높이 = {Pl(m1 * m2, g)} ÷ {Pl(m1, g)} = {Pl(m2, g)}", "평행사변형의 넓이 = 밑변 × 높이"
+    elif mode == "rect":
+        q = f"세로의 길이가 ${T(m1, g)}$인 직사각형의 넓이가 ${T(m1 * m2, g)}$일 때, 이 직사각형의 가로의 길이는?"
+        ans_, ex, hint = m2, f"가로 = {Pl(m1 * m2, g)} ÷ {Pl(m1, g)} = {Pl(m2, g)}", "직사각형의 넓이 = 가로 × 세로"
+    elif mode == "tri":
+        need(sp.Poly(m1 * m2, *g).LC() % 2 == 0)
+        q = f"높이가 ${T(m1, g)}$인 삼각형의 넓이가 ${T(sp.expand(m1 * m2 / 2), g)}$일 때, 이 삼각형의 밑변의 길이는?"
+        ans_, ex, hint = m2, f"밑변 = {Pl(sp.expand(m1 * m2 / 2), g)} × 2 ÷ {Pl(m1, g)} = {Pl(m2, g)}", "삼각형의 넓이 = 밑변 × 높이 ÷ 2"
+    elif mode == "cuboid":
+        m3 = R.randint(1, 4) * u ** R.randint(0, 2) * v ** R.randint(0, 2)
+        need(m3.free_symbols)
+        q = f"가로의 길이가 ${T(m1, g)}$, 세로의 길이가 ${T(m3, g)}$인 직육면체의 부피가 ${T(sp.expand(m1 * m2 * m3), g)}$일 때, 이 직육면체의 높이는?"
+        ans_, ex, hint = m2, f"높이 = {Pl(sp.expand(m1 * m2 * m3), g)} ÷ ({Pl(sp.expand(m1 * m3), g)}) = {Pl(m2, g)}", "직육면체의 부피 = 가로 × 세로 × 높이"
+    else:
+        m3 = R.randint(1, 4) * u ** R.randint(0, 1) * v ** R.randint(0, 1) * 2
+        base_area = sp.expand(m1 * m3 / 2)
+        q = f"밑면이 두 변의 길이가 ${T(m1, g)}$, ${T(m3, g)}$인 직각삼각형인 삼각기둥의 부피가 ${T(sp.expand(base_area * m2), g)}$일 때, 이 삼각기둥의 높이는?"
+        ans_, ex, hint = m2, f"밑넓이 = {Pl(base_area, g)}, 높이 = {Pl(sp.expand(base_area * m2), g)} ÷ {Pl(base_area, g)} = {Pl(m2, g)}", "기둥의 부피 = 밑넓이 × 높이"
+    ch, ans = mono_mc(ans_, g)
+    return P("보통", q, ans, choices=ch, hint=hint, explanation=ex, steps=[f"답: {Pl(ans_, g)}"])
+
+
+@kind(U, "잘못 계산한 식 바로잡기 (단항식)", 12)
+def _():
+    g = (a, b) if R.random() < 0.5 else (x, y)
+    u, v = g
+    X = nz(-5, 5) * u ** R.randint(0, 2) * v ** R.randint(0, 2) / (u ** R.randint(0, 2))
+    X = sp.simplify(X)
+    need(X.free_symbols)
+    Y = sp.simplify(Q(F(nz(-6, 6), R.choice([1, 1, 2, 3]))) * u ** R.randint(1, 3) * v ** R.randint(1, 3))
+    mul = R.random() < 0.6  # 곱해야 할 것을 나눔 / 나눠야 할 것을 곱함
+    A_ = sp.simplify(Y * X if mul else Y / X)
+    right = sp.simplify(A_ * X if mul else A_ / X)
+    ch, ans = mono_mc(right, g, [A_, Y])
+    q = (f"어떤 식에 ${mono(X, g)}$를 곱해야 할 것을 잘못하여 나누었더니 ${mono(Y, g)}$가 되었다. 바르게 계산한 식은?" if mul else
+         f"어떤 식을 ${mono(X, g)}$로 나누어야 할 것을 잘못하여 곱하였더니 ${mono(Y, g)}$가 되었다. 바르게 계산한 식은?")
+    return P("어려움", q, ans, choices=ch,
+             hint="먼저 어떤 식 A를 구해요: " + ("A ÷ X = Y 이므로 A = Y × X" if mul else "A × X = Y 이므로 A = Y ÷ X"),
+             explanation=f"A = {mono(A_, g, False)}, 바른 계산 = {mono(right, g, False)}",
+             steps=[f"어떤 식 A = {mono(A_, g, False)}", f"바른 계산: {mono(right, g, False)}"])
+
 
 # ═════════════════════ 3. 다항식의 계산 ═════════════════════
 U = "3. 다항식의 계산"
 
 
-def poly_mc(right, gens, wrongs):
-    return mc(f"${fmt(right, gens)}$", [f"${fmt(w, gens)}$" for w in wrongs if sp.expand(w - right) != 0])
+def rlin(g, const=True):
+    return nz(-6, 6) * g[0] + nz(-6, 6) * g[1] + (R.randint(-9, 9) if const else 0)
 
 
-for P, Q, k in [((1, 3, -2), (2, 1, -3), 3), ((2, -3, 5), (1, -2, 2), 2)]:  # 다항식의 덧셈과 뺄셈
-    E1 = P[0] * a + P[1] * b + P[2]
-    E2 = Q[0] * a + Q[1] * b + Q[2]
-    R = sp.expand(E1 - k * E2)
-    wr = [sp.expand(E1 + k * E2), sp.expand(E1 - k * Q[0] * a - k * Q[1] * b + k * Q[2]), sp.expand(E1 - k * Q[0] * a + k * Q[1] * b - k * Q[2]),
-          sp.expand(E1 - Q[0] * a - k * Q[1] * b - k * Q[2]), sp.expand(R + 2 * b)]
-    ch, ans = poly_mc(R, (a, b), wr)
-    add(U, "다항식의 덧셈과 뺄셈", "쉬움", f"$({fmt(E1, (a, b))}) - {k}({fmt(E2, (a, b))})$를 계산하면?", ans, choices=ch,
-        hint="괄호 앞의 수를 모든 항에 곱하고, 빼는 식은 부호를 모두 바꿔요.",
-        explanation=f"동류항끼리 모으면 {fmt(R, (a, b), False)}",
-        steps=[f"a의 계수: {P[0]} - {k}×({Q[0]}) = [[{P[0] - k * Q[0]}]]", f"b의 계수: {P[1]} - {k}×({Q[1]}) = [[{P[1] - k * Q[1]}]]",
-               f"상수항: {P[2]} - {k}×({Q[2]}) = [[{P[2] - k * Q[2]}]]"])
-for (p1, q1), (p2, q2) in [((F(-1, 4), F(1, 3)), (F(3, 4), F(1, 6))), ((F(3, 4), F(-2, 3)), (F(-1, 2), F(1, 6)))]:
+@kind(U, "다항식의 덧셈과 뺄셈", 14)
+def _():
+    g = (a, b) if R.random() < 0.5 else (x, y)
+    if R.random() < 0.6:
+        E1, E2, k = rlin(g), rlin(g), R.choice([1, 2, 3, -2, -3, 4])
+        Rr = sp.expand(E1 - k * E2)
+        need(len(sp.Add.make_args(Rr)) >= 2)
+        ch, ans = poly_mc(Rr, g, [sp.expand(E1 + k * E2), sp.expand(E1 - E2)])
+        kk = "" if k == 1 else str(k)
+        return P("쉬움", f"$({fmt(E1, g)}) - {kk}({fmt(E2, g)})$를 계산하면?", ans, choices=ch,
+                 hint="괄호 앞의 수를 모든 항에 곱하고, 빼기 뒤의 괄호는 부호를 모두 바꿔요.",
+                 explanation=f"괄호를 풀고 동류항끼리 모으면 {fmt(Rr, g, False)}",
+                 steps=[f"결과: {fmt(Rr, g, False)}"])
+    p1, q1, p2, q2 = (F(nz(-5, 5), R.choice([2, 3, 4, 6])) for _ in range(4))
     A_, B_ = p1 + p2, q1 + q2
-    ex = lambda c, v: (ftex(c) if abs(c) != 1 else ("-" if c < 0 else "")) + v
+    need(A_ != 0 and B_ != 0)
     def two(c1, c2):
-        s = ex(c1, "x")
-        s += (" + " if c2 > 0 else " - ") + ex(abs(c2), "y")
-        return s
-    add(U, "다항식의 덧셈과 뺄셈", "보통",
-        f"$\\left({two(p1, q1)}\\right) + \\left({two(p2, q2)}\\right) = ax + by$일 때, 수 $a$, $b$에 대하여 $ab$의 값을 구하시오.", fpl(A_ * B_),
-        hint="x는 x끼리, y는 y끼리 통분해서 더해요.",
-        explanation=f"a = {fpl(p1)} + ({fpl(p2)}) = {fpl(A_)}, b = {fpl(q1)} + ({fpl(q2)}) = {fpl(B_)}, ab = {fpl(A_ * B_)}",
-        steps=[f"a = [[{fpl(A_)}]]", f"b = [[{fpl(B_)}]]", f"ab = [[{fpl(A_ * B_)}]]"])
+        return fmt(Q(c1) * g[0] + Q(c2) * g[1], g)
+    op = R.choice(["+", "-"])
+    A_, B_ = (p1 + p2, q1 + q2) if op == "+" else (p1 - p2, q1 - q2)
+    need(A_ != 0 and B_ != 0 and (A_ * B_).denominator <= 36)
+    return P("보통", f"$\\left({two(p1, q1)}\\right) {op} \\left({two(p2, q2)}\\right) = p{g[0]} + q{g[1]}$일 때, 수 $p$, $q$에 대하여 $pq$의 값을 구하시오.",
+             fpl(A_ * B_), hint=f"{g[0]}는 {g[0]}끼리, {g[1]}는 {g[1]}끼리 통분해서 계산해요.",
+             explanation=f"p = {fpl(A_)}, q = {fpl(B_)}, pq = {fpl(A_ * B_)}",
+             steps=[f"p = [[{fpl(A_)}]]", f"q = [[{fpl(B_)}]]", f"pq = [[{fpl(A_ * B_)}]]"])
 
-for E1, E2, k in [(-2 * x ** 2 + 5 * x - 3, x ** 2 + x - 4, 3), (2 * x ** 2 - x + 7, -x ** 2 + 2 * x + 3, 3)]:  # 이차식의 덧셈과 뺄셈
-    R = sp.expand(E1 - k * E2)
-    po = sp.Poly(R, x)
-    c2, c0 = po.coeff_monomial(x ** 2), po.coeff_monomial(1)
-    add(U, "이차식의 덧셈과 뺄셈", "보통",
-        f"$({fmt(E1, (x,))}) - {k}({fmt(E2, (x,))})$를 계산했을 때, $x^{{2}}$의 계수와 상수항의 합을 구하시오.", int(c2 + c0),
-        hint="괄호를 풀 때 빼기 뒤의 모든 항의 부호를 바꿔요.",
-        explanation=f"계산하면 {fmt(R, (x,), False)} → {c2} + ({c0}) = {c2 + c0}",
-        steps=[f"x²의 계수: [[{c2}]]", f"상수항: [[{c0}]]", f"합: [[{c2 + c0}]]"])
-E = sp.Rational(1, 3) * (x ** 2 - 3 * x + 2) + sp.Rational(1, 2) * (x ** 2 + x)
-po = sp.Poly(sp.expand(E), x)
-A2, B2, C2 = po.coeff_monomial(x ** 2), po.coeff_monomial(x), po.coeff_monomial(1)
-val = A2 + 6 * B2 - 3 * C2
-add(U, "이차식의 덧셈과 뺄셈", "어려움",
-    "$\\frac{x^{2} - 3x + 2}{3} + \\frac{x^{2} + x}{2} = ax^{2} + bx + c$일 때, 수 $a$, $b$, $c$에 대하여 $a + 6b - 3c$의 값을 구하시오.", fpl(F(int(sp.fraction(val)[0]), int(sp.fraction(val)[1]))),
-    hint="분모 3과 2의 최소공배수 6으로 통분해요.",
-    explanation=f"a = {A2}, b = {B2}, c = {C2} → a + 6b - 3c = {val}",
-    steps=[f"a = [[{A2}]]", f"b = [[{B2}]]", f"c = [[{C2}]]", f"a + 6b - 3c = [[{val}]]"])
 
-for q, e in [("3a - [2b - \\{4a - (a - 3b)\\}]", 3 * a - (2 * b - (4 * a - (a - 3 * b)))),  # 여러 가지 괄호
-             ("5x - [3y - \\{2x - (x - 4y)\\} + x]", 5 * x - (3 * y - (2 * x - (x - 4 * y)) + x))]:
-    gens = (a, b) if "a" in q else (x, y)
-    R = sp.expand(e)
-    wr = [sp.expand(R + 2 * gens[1]), sp.expand(R - 2 * gens[0]), sp.expand(-R), sp.expand(R + 4 * gens[1] - 2 * gens[0]), sp.expand(R - 6 * gens[1])]
-    ch, ans = poly_mc(R, gens, wr)
-    add(U, "여러 가지 괄호가 있는 계산", "보통", f"${q}$를 계산하면?", ans, choices=ch,
-        hint="( ) → { } → [ ] 순서로 안쪽 괄호부터 풀어요.",
-        explanation=f"안쪽부터 풀면 {fmt(R, gens, False)}",
-        steps=[f"결과: {fmt(R, gens, False)}"])
-e = 4 * a - (3 * a ** 2 - (2 * a - 5 * a ** 2 - (a ** 2 - 4 * a)))
-po = sp.Poly(sp.expand(e), a)
-c2, c1 = po.coeff_monomial(a ** 2), po.coeff_monomial(a)
-add(U, "여러 가지 괄호가 있는 계산", "어려움",
-    "$4a - [3a^{2} - \\{2a - 5a^{2} - (a^{2} - 4a)\\}]$를 계산했을 때, $a^{2}$의 계수를 $p$, $a$의 계수를 $q$라 하자. $p + q$의 값을 구하시오.", int(c2 + c1),
-    hint="안쪽 괄호부터 하나씩 풀고, 괄호 앞이 빼기면 부호를 모두 바꿔요.",
-    explanation=f"계산하면 {fmt(sp.expand(e), (a,), False)} → p + q = {c2} + ({c1}) = {c2 + c1}",
-    steps=[f"p = [[{c2}]]", f"q = [[{c1}]]", f"p + q = [[{c2 + c1}]]"])
+@kind(U, "이차식의 덧셈과 뺄셈", 14)
+def _():
+    if R.random() < 0.6:
+        E1 = nz(-4, 4) * x ** 2 + R.randint(-8, 8) * x + R.randint(-9, 9)
+        E2 = nz(-4, 4) * x ** 2 + R.randint(-8, 8) * x + R.randint(-9, 9)
+        k = R.choice([1, 2, 3, 4, -2])
+        Rr = sp.expand(E1 - k * E2)
+        po = sp.Poly(Rr, x)
+        c2, c1, c0 = (po.coeff_monomial(m_) for m_ in (x ** 2, x, 1))
+        ask = R.choice(["x²의 계수와 상수항의 합", "x의 계수와 상수항의 합", "x²의 계수와 x의 계수의 곱"])
+        val = {"x²의 계수와 상수항의 합": c2 + c0, "x의 계수와 상수항의 합": c1 + c0, "x²의 계수와 x의 계수의 곱": c2 * c1}[ask]
+        kk = "" if k == 1 else str(k)
+        return P("보통", f"$({fmt(E1, (x,))}) - {kk}({fmt(E2, (x,))})$를 계산했을 때, {ask.replace('x²', '$x^{2}$').replace('x의', '$x$의')}을 구하시오.", int(val),
+                 hint="괄호를 풀 때 빼기 뒤의 모든 항의 부호를 바꾸고, 차수가 같은 항끼리 모아요.",
+                 explanation=f"계산하면 {fmt(Rr, (x,), False)}", steps=[f"정리: {fmt(Rr, (x,), False)}", f"답: [[{val}]]"])
+    m, n = R.choice([(2, 3), (3, 2), (2, 4), (4, 3), (3, 6), (2, 5)])
+    E1 = R.randint(1, 3) * x ** 2 + R.randint(-5, 5) * x + R.randint(-5, 5)
+    E2 = nz(-3, 3) * x ** 2 + R.randint(-5, 5) * x + R.randint(-5, 5)
+    S = sp.expand(E1 / m + E2 / n)
+    po = sp.Poly(S, x)
+    A2, B2, C2 = (rat(po.coeff_monomial(m_)) for m_ in (x ** 2, x, 1))
+    val = A2 + B2 + C2
+    return P("어려움", f"$\\frac{{{fmt(E1, (x,))}}}{{{m}}} + \\frac{{{fmt(E2, (x,))}}}{{{n}}} = ax^{{2}} + bx + c$일 때, 수 $a$, $b$, $c$에 대하여 $a + b + c$의 값을 구하시오.",
+             fpl(val), hint=f"분모 {m}과 {n}의 최소공배수로 통분해요.",
+             explanation=f"a = {fpl(A2)}, b = {fpl(B2)}, c = {fpl(C2)} → {fpl(val)}",
+             steps=[f"a = [[{fpl(A2)}]]", f"b = [[{fpl(B2)}]]", f"c = [[{fpl(C2)}]]", f"a + b + c = [[{fpl(val)}]]"])
 
-for A_, Bw, add_mode in [(2 * x ** 2 - 3 * x + 5, x ** 2 + 4 * x - 1, True), (4 * x ** 2 - 1 + x, -5 * x ** 2 - 2 * x + 3, False)]:  # 바르게 계산한 식
-    # add_mode: A를 더해야 할 것을 빼서 Bw가 됨 -> 어떤 식 = Bw + A, 바른 답 = Bw + 2A
-    if add_mode:
-        orig = sp.expand(Bw + A_); right = sp.expand(orig + A_)
+
+@kind(U, "여러 가지 괄호가 있는 계산", 14)
+def _():
+    g = (a, b) if R.random() < 0.5 else (x, y)
+    u, v = g
+    A1, B1, C1, D1 = (nz(-5, 5) * R.choice(g) for _ in range(4))
+    D2 = nz(-5, 5) * R.choice(g)
+    need(len(sp.Add.make_args(sp.expand(D1 + D2))) == 2)
+    s1, s2 = R.choice([1, -1]), R.choice([1, -1])
+    e = A1 - (B1 - (C1 + s1 * (D1 + D2)))
+    Rr = sp.expand(e)
+    need(len(sp.Add.make_args(Rr)) == 2)
+    def tt(t_):
+        return T(t_, g)
+    inner = f"({fmt(D1 + D2, g)})"
+    q = f"${tt(A1)} - [{tt(B1)} - \\{{{tt(C1)} {'+' if s1 > 0 else '-'} {inner}\\}}]$"
+    q = q.replace("- -", "+ ").replace("+ -", "- ")
+    # 정답 확인: 화면에 보이는 식을 그대로 다시 계산
+    check = A1 - (B1 - (C1 + s1 * (D1 + D2)))
+    need(sp.expand(check - Rr) == 0)
+    ch, ans = poly_mc(Rr, g)
+    return P("보통", f"{q}를 계산하면?", ans, choices=ch, hint="( ) → { } → [ ] 순서로 안쪽 괄호부터 풀어요. 괄호 앞이 -면 부호를 모두 바꿔요.",
+             explanation=f"안쪽부터 풀면 {fmt(Rr, g, False)}", steps=[f"결과: {fmt(Rr, g, False)}"])
+
+
+@kind(U, "여러 가지 괄호: 계수 구하기", 10)
+def _():
+    c = [nz(-5, 5) for _ in range(6)]
+    e = c[0] * a - (c[1] * a ** 2 - (c[2] * a + c[3] * a ** 2 - (c[4] * a ** 2 + c[5] * a)))
+    po = sp.Poly(sp.expand(e), a)
+    p2, p1 = po.coeff_monomial(a ** 2), po.coeff_monomial(a)
+    need(p2 != 0 and p1 != 0)
+    def tt(k, e_):
+        return T(k * e_, (a,))
+    q = (f"${tt(c[0], a)} - [{tt(c[1], a ** 2)} - \\{{{tt(c[2], a)} {sgn(c[3]).split()[0]} {T(abs(c[3]) * a ** 2, (a,))} - ({fmt(c[4] * a ** 2 + c[5] * a, (a,))})\\}}]$")
+    return P("어려움", f"{q}를 계산했을 때, $a^{{2}}$의 계수를 $p$, $a$의 계수를 $q$라 하자. $p + q$의 값을 구하시오.", int(p2 + p1),
+             hint="안쪽 괄호부터 하나씩 풀고, 괄호 앞이 빼기면 부호를 모두 바꿔요.",
+             explanation=f"계산하면 {fmt(sp.expand(e), (a,), False)} → p + q = {p2} + ({p1}) = {p2 + p1}",
+             steps=[f"p = [[{p2}]]", f"q = [[{p1}]]", f"p + q = [[{p2 + p1}]]"])
+
+
+@kind(U, "바르게 계산한 식 구하기", 14)
+def _():
+    A_ = nz(-5, 5) * x ** 2 + R.randint(-6, 6) * x + R.randint(-6, 6)
+    Bw = nz(-5, 5) * x ** 2 + R.randint(-6, 6) * x + R.randint(-6, 6)
+    mode = R.choice(["add_sub", "sub_add"])
+    if mode == "add_sub":
+        orig, right = sp.expand(Bw + A_), sp.expand(Bw + 2 * A_)
         q = f"어떤 식에 ${fmt(A_, (x,))}$를 더해야 할 것을 잘못하여 뺐더니 ${fmt(Bw, (x,))}$가 되었다. 바르게 계산한 식은?"
         hint = "먼저 어떤 식을 구해요: (어떤 식) - A = B 이므로 (어떤 식) = B + A"
     else:
-        orig = sp.expand(Bw - A_); right = sp.expand(orig - A_)
+        orig, right = sp.expand(Bw - A_), sp.expand(Bw - 2 * A_)
         q = f"어떤 식에서 ${fmt(A_, (x,))}$를 빼야 할 것을 잘못하여 더했더니 ${fmt(Bw, (x,))}$가 되었다. 바르게 계산한 식은?"
         hint = "먼저 어떤 식을 구해요: (어떤 식) + A = B 이므로 (어떤 식) = B - A"
-    wr = [orig, sp.expand(Bw), sp.expand(-right), sp.expand(right + 2 * x), sp.expand(right - 2)]
-    ch, ans = poly_mc(right, (x,), wr)
-    add(U, "바르게 계산한 식 구하기", "어려움", q, ans, choices=ch, hint=hint,
-        explanation=f"어떤 식 = {fmt(orig, (x,), False)}, 바른 계산 = {fmt(right, (x,), False)}",
-        steps=[f"어떤 식 = {fmt(orig, (x,), False)}", f"바른 계산 = {fmt(right, (x,), False)}"])
+    need(right != 0 and orig != 0)
+    ch, ans = poly_mc(right, (x,), [orig, Bw])
+    return P("어려움", q, ans, choices=ch, hint=hint,
+             explanation=f"어떤 식 = {fmt(orig, (x,), False)}, 바른 계산 = {fmt(right, (x,), False)}",
+             steps=[f"어떤 식 = {fmt(orig, (x,), False)}", f"바른 계산 = {fmt(right, (x,), False)}"])
 
-e1 = sp.expand(-3 * x * (x + 2 * y - 4)); e2 = sp.expand((2 * x - 3 * y + 1) * 5 * y)  # (단항식)×(다항식)
-c_a = sp.Poly(e1, x, y).coeff_monomial(x ** 2); c_b = sp.Poly(e2, x, y).coeff_monomial(x * y)
-add(U, "(단항식)×(다항식)", "보통",
-    "$-3x(x + 2y - 4)$를 전개한 식의 $x^{2}$의 계수를 $a$, $(2x - 3y + 1) \\times 5y$를 전개한 식의 $xy$의 계수를 $b$라 할 때, $ab$의 값을 구하시오.", int(c_a * c_b),
-    hint="분배법칙으로 괄호 안의 모든 항에 곱해요.",
-    explanation=f"{fmt(e1, (x, y), False)} → a = {c_a}, {fmt(e2, (x, y), False)} → b = {c_b}, ab = {c_a * c_b}",
-    steps=[f"a = [[{c_a}]]", f"b = [[{c_b}]]", f"ab = [[{c_a * c_b}]]"])
-st = []
-for lt, lhs, shown, gens in [
-    ("-2a(3a - b)", -2 * a * (3 * a - b), -6 * a ** 2 - 2 * a * b, (a, b)),
-    ("x(x - 4y)", x * (x - 4 * y), x ** 2 - 4 * x * y, (x, y)),
-    ("\\frac{1}{2}a(4a - 6)", sp.Rational(1, 2) * a * (4 * a - 6), 2 * a ** 2 - 6 * a, (a, b)),
-    ("(3x - y) \\times 2y", (3 * x - y) * 2 * y, 6 * x * y - 2 * y, (x, y)),
-    ("-b(2a^{2} - ab + b^{2})", -b * (2 * a ** 2 - a * b + b ** 2), -2 * a ** 2 * b - a * b ** 2 - b ** 3, (a, b)),
-]:
-    st.append((f"${lt} = {fmt(shown, gens)}$", sp.expand(lhs - shown) == 0))
-ch, ans = pick(st, True)
-add(U, "(단항식)×(다항식)", "보통", "다음 중 옳은 것은?", ans, choices=ch,
-    hint="괄호 안의 각 항에 빠짐없이 곱하고, 부호를 꼭 확인해요.",
-    explanation="각 식을 분배법칙으로 전개해서 오른쪽과 비교해요.",
-    steps=["괄호 안의 [[모든]] 항에 곱한다"])
 
-for num_, den_ in [(9 * x ** 2 * y - 6 * x * y ** 2 + 3 * x * y, sp.Rational(3, 4) * x * y), (9 * a ** 2 * b - 12 * a * b ** 2 + 3 * a * b, -sp.Rational(3, 2) * a * b)]:  # (다항식)÷(단항식)
-    gens = (x, y) if num_.has(x) else (a, b)
-    R = sp.expand(num_ / den_)
-    po = sp.Poly(R, *gens)
-    A1 = po.coeff_monomial(gens[0]); B1 = po.coeff_monomial(gens[1]); C1 = po.coeff_monomial(1)
-    v = A1 - B1 - C1
-    add(U, "(다항식)÷(단항식)", "보통",
-        f"$({fmt(num_, gens)}) \\div \\left({mono_tex(den_, gens)}\\right) = a{gens[0]} + b{gens[1]} + c$일 때, 수 $a$, $b$, $c$에 대하여 $a - b - c$의 값을 구하시오.".replace("a(x", "a(x") if gens == (x, y) else
-        f"$({fmt(num_, gens)}) \\div \\left({mono_tex(den_, gens)}\\right) = pa + qb + r$일 때, 수 $p$, $q$, $r$에 대하여 $p - q - r$의 값을 구하시오.",
-        int(v), hint="분수로 나눌 때는 역수를 곱해요. 각 항을 따로 나눠요.",
-        explanation=f"계산하면 {fmt(R, gens, False)}",
-        steps=[f"결과: {fmt(R, gens, False)}", f"답: [[{v}]]"])
+@kind(U, "(단항식)×(다항식)", 14)
+def _():
+    if R.random() < 0.5:
+        m1 = nz(-4, 4) * x
+        p1 = x + nz(-4, 4) * y + R.randint(-6, 6)
+        m2 = nz(-6, 6) * R.choice([x, y])
+        p2 = nz(-4, 4) * x + nz(-4, 4) * y + R.randint(-5, 5)
+        e1, e2 = sp.expand(m1 * p1), sp.expand(p2 * m2)
+        ca = sp.Poly(e1, x, y).coeff_monomial(x ** 2)
+        cb = sp.Poly(e2, x, y).coeff_monomial(x * y)
+        need(ca != 0 and cb != 0)
+        return P("보통", f"${T(m1)}({fmt(p1, (x, y))})$를 전개한 식의 $x^{{2}}$의 계수를 $a$, $({fmt(p2, (x, y))}) \\times {paren_t(m2)}$를 전개한 식의 $xy$의 계수를 $b$라 할 때, $ab$의 값을 구하시오.",
+                 int(ca * cb), hint="분배법칙으로 괄호 안의 모든 항에 곱해요.",
+                 explanation=f"{Pl(e1)} → a = {ca}, {Pl(e2)} → b = {cb}, ab = {ca * cb}",
+                 steps=[f"a = [[{ca}]]", f"b = [[{cb}]]", f"ab = [[{ca * cb}]]"])
+    st = []
+    for _ in range(5):
+        g = R.choice([(a, b), (x, y)])
+        mm = nz(-4, 4) * R.choice(g) * R.choice([1, 1, g[0], g[1]])
+        pp = nz(-4, 4) * R.choice(g) + nz(-5, 5) * R.choice([1, g[1], g[0]])
+        need(len(sp.Add.make_args(sp.expand(pp))) == 2)
+        right = sp.expand(mm * pp)
+        ok = R.random() < 0.5
+        shown = right if ok else R.choice(poly_wrongs(right, g))
+        st.append((f"${T(mm, g)}({fmt(pp, g)}) = {fmt(shown, g)}$", sp.expand(shown - right) == 0))
+    want = R.random() < 0.5
+    ch, ans = pick(st, want)
+    return P("보통", f"다음 중 {'옳은' if want else '옳지 않은'} 것은?", ans, choices=ch,
+             hint="괄호 안의 각 항에 빠짐없이 곱하고, 부호를 꼭 확인해요.",
+             explanation="각 식을 분배법칙으로 전개해서 오른쪽과 비교해요.", steps=["괄호 안의 [[모든]] 항에 곱한다"])
 
-for xv, yv in [(-1, 2), (2, -1)]:  # 식의 값
-    E = (8 * x * y ** 2 - 6 * x ** 2) / (2 * x) - (15 * x * y - 9 * x ** 2 * y) / (3 * y)
+
+@kind(U, "(다항식)÷(단항식)", 14)
+def _():
+    g = (x, y) if R.random() < 0.5 else (a, b)
+    u, v = g
+    ans_ = nz(-8, 8) * u + nz(-8, 8) * v + nz(-8, 8)
+    dv = Q(F(nz(-5, 5), R.choice([1, 2, 3, 4, 5]))) * u * v
+    num_ = sp.expand(ans_ * dv)
+    need(all(rat(c_).denominator == 1 for c_ in sp.Poly(num_, *g).coeffs()))
+    po = sp.Poly(ans_, *g)
+    A1, B1, C1 = po.coeff_monomial(u), po.coeff_monomial(v), po.coeff_monomial(1)
+    combo = R.choice([("a + b + c", A1 + B1 + C1), ("a - b - c", A1 - B1 - C1), ("abc", A1 * B1 * C1), ("a + b - c", A1 + B1 - C1)])
+    if R.random() < 0.6:
+        return P("보통", f"$({fmt(num_, g)}) \\div \\left({mono(dv, g)}\\right) = a{u} + b{v} + c$일 때, 수 $a$, $b$, $c$에 대하여 ${combo[0]}$의 값을 구하시오.",
+                 int(combo[1]), hint="분수로 나눌 때는 역수를 곱해요. 각 항을 따로 나눠요.",
+                 explanation=f"계산하면 {fmt(ans_, g, False)} → a = {A1}, b = {B1}, c = {C1}",
+                 steps=[f"결과: {fmt(ans_, g, False)}", f"답: [[{combo[1]}]]"])
+    ch, ans = poly_mc(ans_, g)
+    return P("보통", f"$({fmt(num_, g)}) \\div \\left({mono(dv, g)}\\right)$를 계산하면?", ans, choices=ch,
+             hint="각 항을 단항식으로 나눠요. 분수로 나누면 역수를 곱해요.", explanation=f"계산하면 {fmt(ans_, g, False)}",
+             steps=[f"결과: {fmt(ans_, g, False)}"])
+
+
+@kind(U, "식의 값", 14)
+def _():
+    p1, q1 = nz(-6, 6) * x * y ** 2, nz(-6, 6) * x ** 2
+    d1 = nz(-3, 3) * x
+    p2, q2 = nz(-6, 6) * x * y, nz(-6, 6) * x ** 2 * y
+    d2 = nz(-3, 3) * y
+    E = (p1 + q1) / d1 - (p2 + q2) / d2
     S = sp.expand(sp.simplify(E))
+    need(S.is_polynomial(x, y) and all(rat(c_).denominator == 1 for c_ in sp.Poly(S, x, y).coeffs()))
+    xv, yv = nz(-3, 3), nz(-3, 3)
     val_ = S.subs({x: xv, y: yv})
-    add(U, "식의 값", "보통",
-        f"$x = {xv}$, $y = {yv}$일 때, $\\frac{{8xy^{{2}} - 6x^{{2}}}}{{2x}} - \\frac{{15xy - 9x^{{2}}y}}{{3y}}$의 값을 구하시오.", int(val_),
-        hint="먼저 식을 간단히 한 뒤 수를 대입해요. 음수는 괄호를 씌워요.",
-        explanation=f"간단히 하면 {fmt(S, (x, y), False)}, 대입하면 {val_}",
-        steps=[f"간단히: {fmt(S, (x, y), False)}", f"값: [[{val_}]]"])
+    need(abs(val_) <= 99)
+    return P("보통", f"$x = {xv}$, $y = {yv}$일 때, $\\frac{{{fmt(p1 + q1, (x, y))}}}{{{T(d1)}}} - \\frac{{{fmt(p2 + q2, (x, y))}}}{{{T(d2)}}}$의 값을 구하시오.", int(val_),
+             hint="먼저 식을 간단히 한 뒤 수를 대입해요. 음수는 괄호를 씌워요.",
+             explanation=f"간단히 하면 {Pl(S)}, 대입하면 {val_}", steps=[f"간단히: {Pl(S)}", f"값: [[{val_}]]"])
 
-E = (27 * x ** 3 - 9 * x ** 2 * y) / (3 * x) ** 2 + (2 * x * y - y ** 2) * (-sp.Rational(3, 1) / y)  # 혼합 계산
-S = sp.expand(sp.simplify(E))
-ch, ans = poly_mc(S, (x, y), [sp.expand(S + 6 * x), sp.expand(S - 2 * y), sp.expand(-S), sp.expand(S - 6 * y), sp.expand(S + 12 * x)])
-add(U, "혼합된 식의 계산", "어려움",
-    "$(27x^{3} - 9x^{2}y) \\div (3x)^{2} + (2xy - y^{2}) \\times \\left(-\\frac{3}{y}\\right)$를 계산하면?", ans, choices=ch,
-    hint="거듭제곱 → 곱셈·나눗셈 → 덧셈·뺄셈 순서로 해요.",
-    explanation=f"앞: {fmt(sp.expand((27 * x ** 3 - 9 * x ** 2 * y) / (9 * x ** 2)), (x, y), False)}, 뒤: {fmt(sp.expand((2 * x * y - y ** 2) * (-3 / y)), (x, y), False)} → {fmt(S, (x, y), False)}",
-    steps=["(3x)² = [[9]]x²", f"결과: {fmt(S, (x, y), False)}"])
 
-BX = 3 * a * b - 2 * b  # □ 안에 알맞은 식 (다항식)
-L = -sp.Rational(4, 3) * a * b
-R = sp.expand(L * (-9 * a ** 2 + 3 * a) / 1)
-L, BX = -sp.Rational(3, 2) * a * b, -4 * a ** 2 + 2 * a * b
-R = sp.expand(L * BX)
-ch, ans = poly_mc(BX, (a, b), [sp.expand(-BX), sp.expand(BX * a), sp.expand(4 * a ** 2 + 2 * a * b), sp.expand(-4 * a + 2 * b), sp.expand(R / L * 2)])
-add(U, "□ 안에 알맞은 식", "보통",
-    f"$\\left(-\\frac{{3}}{{2}}ab\\right) \\times \\square = {fmt(R, (a, b))}$일 때, $\\square$ 안에 알맞은 식은?", ans, choices=ch,
-    hint="□ = (오른쪽) ÷ (곱한 단항식)", explanation=f"□ = ({fmt(R, (a, b), False)}) ÷ (-3/2ab) = {fmt(BX, (a, b), False)}",
-    steps=[f"□ = {fmt(BX, (a, b), False)}"])
+@kind(U, "덧셈·뺄셈·곱셈·나눗셈이 혼합된 계산", 12)
+def _():
+    k = R.choice([2, 3])
+    q1, q2 = nz(-4, 4), nz(-4, 4)
+    num1 = sp.expand((q1 * x + q2 * y) * k ** 2 * x ** 2)
+    m = nz(-4, 4)
+    p2 = nz(-4, 4) * x * y + nz(-3, 3) * y ** 2
+    E = num1 / (k * x) ** 2 + p2 * (Q(m) / y)
+    S = sp.expand(sp.simplify(E))
+    need(len(sp.Add.make_args(S)) == 2)
+    ch, ans = poly_mc(S, (x, y))
+    mtx = f"\\left({'-' if m < 0 else ''}\\frac{{{abs(m)}}}{{y}}\\right)"
+    return P("어려움", f"$({fmt(num1, (x, y))}) \\div ({k}x)^{{2}} + ({fmt(p2, (x, y))}) \\times {mtx}$를 계산하면?", ans, choices=ch,
+             hint="거듭제곱 → 곱셈·나눗셈 → 덧셈·뺄셈 순서로 해요.",
+             explanation=f"앞: {Pl(sp.expand(num1 / (k * x) ** 2))}, 뒤: {Pl(sp.expand(p2 * m / y))} → {Pl(S)}",
+             steps=[f"({k}x)² = [[{k * k}]]x²", f"결과: {Pl(S)}"])
 
-top, bot, hgt = 4 * y, 8 * x * y - 2 * y, 2 * x ** 2 * y  # 도형: 사다리꼴
-S = sp.expand((top + bot) * hgt / 2)
-ch, ans = poly_mc(S, (x, y), [sp.expand((top + bot) * hgt), sp.expand(S + 2 * x ** 3 * y ** 2), sp.expand(bot * hgt / 2), sp.expand(S - 4 * x ** 3 * y ** 2)])
-add(U, "도형에의 활용", "보통",
-    f"윗변의 길이가 ${t(top)}$, 아랫변의 길이가 ${t(bot)}$, 높이가 ${t(hgt)}$인 사다리꼴의 넓이는?", ans, choices=ch,
-    hint="사다리꼴의 넓이 = (윗변 + 아랫변) × 높이 ÷ 2",
-    explanation=f"({p(top)} + {p(bot)}) × {p(hgt)} ÷ 2 = {p(S)}",
-    steps=[f"윗변 + 아랫변 = {p(sp.expand(top + bot))}", f"넓이 = {p(S)}"])
-h_, S = 4 * a, 12 * a ** 2 + 8 * a * b  # 삼각형 밑변
-base = sp.expand(2 * S / h_)
-ch, ans = poly_mc(base, (a, b), [sp.expand(S / h_), sp.expand(base * a), sp.expand(base + 2 * b), sp.expand(base - 3 * a)])
-add(U, "도형에의 활용", "보통", f"높이가 ${t(h_, (a, b))}$인 삼각형의 넓이가 ${t(S, (a, b))}$일 때, 이 삼각형의 밑변의 길이는?", ans, choices=ch,
-    hint="삼각형의 넓이 = 밑변 × 높이 ÷ 2 이므로 밑변 = 넓이 × 2 ÷ 높이",
-    explanation=f"({p(S, (a, b))}) × 2 ÷ {p(h_, (a, b))} = {p(base, (a, b))}",
-    steps=[f"밑변 = {p(base, (a, b))}"])
-W, H, eb, fc = 6 * a, 4 * b, 2 * a, 3 * b  # 색칠한 부분의 넓이 = 직사각형 - 세 직각삼각형
-# A(0, H) 왼쪽 위, B(W, H) 오른쪽 위, C(W, 0) 오른쪽 아래, D(0, 0) 왼쪽 아래, E는 AB 위 (EB = eb), F는 BC 위 (FC = fc)
-t_ade = (W - eb) * H / 2
-t_ebf = eb * (H - fc) / 2
-t_fcd = fc * W / 2
-shaded = sp.expand(W * H - t_ade - t_ebf - t_fcd)
-Ex, Ey, Fx, Fy = W - eb, H, W, fc
-assert sp.expand(shaded - sp.Abs(Ex * Fy - Fx * Ey).subs({a: 1, b: 1}) / 2 * a * b) == 0  # 신발끈 공식으로 검산 (D가 원점)
-ch, ans = poly_mc(shaded, (a, b), [sp.expand(2 * shaded), sp.expand(W * H - shaded), sp.expand(shaded + a * b), sp.expand(shaded - 2 * a * b)])
-add(U, "도형에의 활용 (색칠한 부분)", "어려움",
-    f"가로 ${t(W, (a, b))}$, 세로 ${t(H, (a, b))}$인 직사각형 ABCD가 있다. (A는 왼쪽 위, B는 오른쪽 위, C는 오른쪽 아래, D는 왼쪽 아래 꼭짓점) "
-    f"변 AB 위에 $\\overline{{EB}} = {t(eb, (a, b))}$인 점 E, 변 BC 위에 $\\overline{{FC}} = {t(fc, (a, b))}$인 점 F를 잡을 때, 삼각형 DEF의 넓이는? (공책에 그림을 그려 봐요)",
-    ans, choices=ch,
-    hint="(삼각형 DEF) = (직사각형) - (삼각형 ADE) - (삼각형 EBF) - (삼각형 FCD)",
-    explanation=f"{p(W * H, (a, b))} - {p(sp.expand(t_ade), (a, b))} - {p(sp.expand(t_ebf), (a, b))} - {p(sp.expand(t_fcd), (a, b))} = {p(shaded, (a, b))}",
-    steps=[f"삼각형 ADE = {p(sp.expand(t_ade), (a, b))}", f"삼각형 EBF = {p(sp.expand(t_ebf), (a, b))}", f"삼각형 FCD = {p(sp.expand(t_fcd), (a, b))}",
-           f"넓이 = {p(shaded, (a, b))}"])
+
+@kind(U, "□ 안에 알맞은 식 (다항식)", 12)
+def _():
+    g = (a, b) if R.random() < 0.5 else (x, y)
+    u, v = g
+    L = Q(F(nz(-5, 5), R.choice([1, 2, 3]))) * u * v ** R.randint(0, 1)
+    BX = nz(-6, 6) * u ** 2 + nz(-6, 6) * u * v
+    Rr = sp.expand(L * BX)
+    need(all(rat(c_).denominator == 1 for c_ in sp.Poly(Rr, *g).coeffs()))
+    if R.random() < 0.5:
+        q = f"$\\left({mono(L, g)}\\right) \\times \\square = {fmt(Rr, g)}$일 때, $\\square$ 안에 알맞은 식은?"
+        ex = f"□ = ({fmt(Rr, g, False)}) ÷ ({mono(L, g, False)}) = {fmt(BX, g, False)}"
+    else:
+        Rr, BX = BX, Rr
+        q = f"$\\square \\div \\left({mono(L, g)}\\right) = {fmt(Rr, g)}$일 때, $\\square$ 안에 알맞은 식은?"
+        ex = f"□ = ({fmt(Rr, g, False)}) × ({mono(L, g, False)}) = {fmt(BX, g, False)}"
+    ch, ans = poly_mc(BX, g)
+    return P("보통", q, ans, choices=ch, hint="곱한 것은 나누고, 나눈 것은 곱해서 □를 구해요.", explanation=ex, steps=[f"□ = {fmt(BX, g, False)}"])
+
+
+@kind(U, "다항식: 도형에의 활용", 14)
+def _():
+    mode = R.choice(["trap", "tri", "cuboid", "shade"])
+    g = (a, b) if R.random() < 0.5 else (x, y)
+    u, v = g
+    if mode == "trap":
+        top, bot, hgt = R.randint(1, 5) * v, R.randint(2, 8) * u * v + nz(-4, 4) * v, R.randint(1, 4) * u ** 2 * v
+        need(sp.Poly(sp.expand(top + bot), *g).coeff_monomial(v) != 0)
+        S = sp.expand((top + bot) * hgt / 2)
+        need(all(rat(c_).denominator == 1 for c_ in sp.Poly(S, *g).coeffs()))
+        q = f"윗변의 길이가 ${T(top, g)}$, 아랫변의 길이가 ${fmt(bot, g)}$, 높이가 ${T(hgt, g)}$인 사다리꼴의 넓이는?"
+        ex, hint = f"({Pl(top, g)} + {fmt(bot, g, False)}) × {Pl(hgt, g)} ÷ 2 = {fmt(S, g, False)}", "사다리꼴의 넓이 = (윗변 + 아랫변) × 높이 ÷ 2"
+        extra = [sp.expand((top + bot) * hgt), sp.expand(bot * hgt / 2)]
+    elif mode == "tri":
+        h_ = R.randint(2, 6) * u
+        base = R.randint(1, 5) * u + R.randint(1, 5) * v
+        S_ = sp.expand(base * h_ / 2)
+        need(all(rat(c_).denominator == 1 for c_ in sp.Poly(S_, *g).coeffs()))
+        q = f"높이가 ${T(h_, g)}$인 삼각형의 넓이가 ${fmt(S_, g)}$일 때, 이 삼각형의 밑변의 길이는?"
+        S, ex, hint = base, f"({fmt(S_, g, False)}) × 2 ÷ {Pl(h_, g)} = {fmt(base, g, False)}", "삼각형의 넓이 = 밑변 × 높이 ÷ 2 이므로 밑변 = 넓이 × 2 ÷ 높이"
+        extra = [sp.expand(S_ / h_)]
+    elif mode == "cuboid":
+        w_, l_ = R.randint(1, 4) * u, R.randint(1, 4) * v
+        h_ = R.randint(1, 5) * u + nz(-4, 4) * v
+        need(sp.Poly(h_, *g).coeff_monomial(u) != 0)
+        vol = sp.expand(w_ * l_ * h_)
+        q = f"가로의 길이가 ${T(w_, g)}$, 세로의 길이가 ${T(l_, g)}$인 직육면체의 부피가 ${fmt(vol, g)}$일 때, 이 직육면체의 높이는?"
+        S, ex, hint = h_, f"({fmt(vol, g, False)}) ÷ ({Pl(w_ * l_, g)}) = {fmt(h_, g, False)}", "직육면체의 부피 = 가로 × 세로 × 높이"
+        extra = []
+    else:
+        W, H = R.randint(3, 8) * u, R.randint(3, 8) * v
+        eb, fc = R.randint(1, 3) * u, R.randint(1, 3) * v
+        need(sp.Poly(W - eb, *g).LC() > 0 and sp.Poly(H - fc, *g).LC() > 0)
+        t_ade, t_ebf, t_fcd = (W - eb) * H / 2, eb * (H - fc) / 2, fc * W / 2
+        S = sp.expand(W * H - t_ade - t_ebf - t_fcd)
+        need(S != 0 and all(rat(c_).denominator == 1 for c_ in sp.Poly(S, *g).coeffs()))
+        q = (f"가로 ${T(W, g)}$, 세로 ${T(H, g)}$인 직사각형 ABCD (A 왼쪽 위, B 오른쪽 위, C 오른쪽 아래, D 왼쪽 아래)에서 "
+             f"변 AB 위에 $\\overline{{EB}} = {T(eb, g)}$인 점 E, 변 BC 위에 $\\overline{{FC}} = {T(fc, g)}$인 점 F를 잡을 때, 삼각형 DEF의 넓이는? (공책에 그림을 그려 봐요)")
+        ex = f"{Pl(W * H, g)} - {Pl(sp.expand(t_ade), g)} - {Pl(sp.expand(t_ebf), g)} - {Pl(sp.expand(t_fcd), g)} = {Pl(S, g)}"
+        hint = "(삼각형 DEF) = (직사각형) - (삼각형 ADE) - (삼각형 EBF) - (삼각형 FCD)"
+        extra = [sp.expand(W * H - S)]
+        ch, ans = mono_mc(S, g, extra)
+        return P("어려움", q, ans, choices=ch, hint=hint, explanation=ex, steps=[f"넓이 = {Pl(S, g)}"])
+    ch, ans = poly_mc(S, g, extra)
+    return P("보통", q, ans, choices=ch, hint=hint, explanation=ex, steps=[f"답: {fmt(S, g, False)}"])
+
 
 # ═════════════════════ 4. 일차부등식 ═════════════════════
 U = "4. 일차부등식"
 REL = {">": ">", "<": "<", ">=": "\\geq", "<=": "\\leq"}
 FLIP = {">": "<", "<": ">", ">=": "<=", "<=": ">="}
 PL = {">": ">", "<": "<", ">=": "≥", "<=": "≤"}
+WORD = {">": "보다 크다", "<": "보다 작다", ">=": " 이상이다", "<=": " 이하이다"}
+WORD2 = {">": "보다 크다", "<": "보다 작다", ">=": "보다 작지 않다", "<=": "보다 크지 않다"}
+
+
+def holds(l_, rel, r_):
+    return {">": l_ > r_, "<": l_ < r_, ">=": l_ >= r_, "<=": l_ <= r_}[rel]
 
 
 def sol_text(sol) -> str:
-    """sympy 구간 -> 'x ≤ 25/4' 같은 글."""
     lo, hi = sol.inf, sol.sup
-    def q(v):
+    def q_(v):
         v = sp.Rational(v)
         return str(v.p) if v.q == 1 else f"{v.p}/{v.q}"
     if lo == -sp.oo:
-        return f"x {'<' if sol.right_open else '≤'} {q(hi)}"
-    return f"x {'>' if sol.left_open else '≥'} {q(lo)}"
+        return f"x {'<' if sol.right_open else '≤'} {q_(hi)}"
+    return f"x {'>' if sol.left_open else '≥'} {q_(lo)}"
 
 
-def holds(lhs, rel, rhs):
-    return {">": lhs > rhs, "<": lhs < rhs, ">=": lhs >= rhs, "<=": lhs <= rhs}[rel]
-
-
-sent = [  # 부등식으로 나타내기 (문장 -> 식), 정답 하나 + 흔한 실수
-    ("어떤 수 $x$의 3배에서 5를 뺀 값은 10보다 작지 않다.", "$3x - 5 \\geq 10$", ["$3x - 5 > 10$", "$3(x - 5) \\geq 10$", "$3x - 5 \\leq 10$", "$5 - 3x \\geq 10$"]),
-    ("한 개에 700원인 빵 $x$개와 1500원인 우유 한 개의 값은 6000원 이하이다.", "$700x + 1500 \\leq 6000$", ["$700x + 1500 < 6000$", "$700 + 1500x \\leq 6000$", "$700x + 1500 \\geq 6000$", "$(700 + 1500)x \\leq 6000$"]),
-]
-for s, right, wr in sent:
-    ch, ans = mc(right, wr)
-    add(U, "부등식으로 나타내기", "쉬움", f"다음 문장을 부등식으로 나타내면? \"{s}\"", ans, choices=ch,
-        hint="크지 않다 = 이하(≤), 작지 않다 = 이상(≥), 미만은 <, 초과는 >",
-        explanation=f"문장을 순서대로 식으로 옮기면 {right.strip('$')}".replace("\\geq", "≥").replace("\\leq", "≤"),
-        steps=["작지 않다 = [[이상]]", "크지 않다 = [[이하]]"])
-
-for xv in (3, -2):  # 부등식의 해
-    cand = []
-    while len(cand) < 12:
-        c1, c0, rhs = nz(-4, 4), rng.randint(-6, 6), rng.randint(-8, 8)
-        rel = rng.choice(list(REL))
-        cand.append((f"${lin(c1, 0, c0)} {REL[rel]} {rhs}$", holds(c1 * xv + c0, rel, rhs)))
-    tr = [c for c in cand if c[1]]
-    fl = [c for c in cand if not c[1]]
-    if not tr or len(fl) < 4:
-        continue
-    ch, ans = pick([tr[0]] + fl[:4], True)
-    add(U, "부등식의 해", "쉬움", f"다음 부등식 중 $x = {xv}$가 해인 것은?", ans, choices=ch,
-        hint=f"x 자리에 {xv}를 넣어서 부등식이 참이 되는지 하나씩 확인해요.",
-        explanation=f"x = {xv}를 대입했을 때 참이 되는 것은 하나뿐이에요.",
-        steps=[f"x = [[{xv}]]를 각 부등식에 대입", "참이 되면 [[해]]"])
-
-for want in (True, False):  # 부등식의 성질 (a > b 일 때)
-    st = []
-    k = rng.choice([2, 3, 4, 5])
-    st += [(f"${k}a > {k}b$", True), (f"$-{k}a < -{k}b$", True), (f"$a - {k} > b - {k}$", True), (f"$\\frac{{a}}{{{k}}} > \\frac{{b}}{{{k}}}$", True),
-           (f"${k} - a < {k} - b$", True), (f"$-\\frac{{a}}{{{k}}} > -\\frac{{b}}{{{k}}}$", False), (f"$-{k}a + 1 > -{k}b + 1$", False),
-           (f"$a + {k} < b + {k}$", False), (f"${k} - 2a > {k} - 2b$", False)]
-    # 진위 확인 (a = 3, b = 1 로 대입해 검산)
-    tr = [s for s in st if s[1] == want]; fl = [s for s in st if s[1] != want]
-    ch, ans = pick([rng.choice(tr)] + rng.sample(fl, 4), want)
-    add(U, "부등식의 성질", "보통", f"$a > b$일 때, 다음 중 {'옳은' if want else '옳지 않은'} 것은?", ans, choices=ch,
-        hint="양변에 같은 음수를 곱하거나 나누면 부등호 방향이 바뀌어요. 더하고 빼는 것은 그대로예요.",
-        explanation="음수를 곱하거나 나눈 식은 부등호 방향이 바뀌고, 나머지는 그대로예요.",
-        steps=["음수를 곱하면 부등호 방향이 [[바뀐다]]", "같은 수를 더하면 방향이 [[그대로]]"])
-for (lo, lor, hi, hir), (m, c) in [((-3, "<", 2, "<="), (2, -1)), ((-1, "<=", 4, "<"), (-3, 2))]:  # 식의 값의 범위
-    v1, v2 = m * lo + c, m * hi + c
-    if m > 0:
-        right = f"${v1} {REL[lor]} {lin(m, 0, c)} {REL[hir]} {v2}$"
-        wr = [f"${v1} {REL[hir]} {lin(m, 0, c)} {REL[lor]} {v2}$", f"${v1 - c} {REL[lor]} {lin(m, 0, c)} {REL[hir]} {v2 - c}$",
-              f"${m * lo} {REL[lor]} {lin(m, 0, c)} {REL[hir]} {m * hi}$", f"${v1 + 1} {REL[lor]} {lin(m, 0, c)} {REL[hir]} {v2 + 1}$",
-              f"${v1 - 2} {REL[lor]} {lin(m, 0, c)} {REL[hir]} {v2 - 2}$", f"${v1} {REL[lor]} {lin(m, 0, c)} {REL[hir]} {v2 + 3}$"]
+@kind(U, "부등식으로 나타내기", 14)
+def _():
+    rel = R.choice(list(REL))
+    kind_ = R.randint(0, 3)
+    if kind_ == 0:
+        p_, q_, c = R.randint(2, 6), R.randint(1, 9), R.randint(5, 30)
+        s = f"어떤 수 $x$의 {p_}배에서 {q_}를 뺀 값은 {c}{WORD2[rel]}."
+        right = f"${p_}x - {q_} {REL[rel]} {c}$"
+        wr = [f"${p_}x - {q_} {REL[FLIP[rel]]} {c}$", f"${p_}(x - {q_}) {REL[rel]} {c}$", f"${q_} - {p_}x {REL[rel]} {c}$", f"${p_}x + {q_} {REL[rel]} {c}$"]
+    elif kind_ == 1:
+        p_, q_, c = R.choice([500, 700, 800, 1200, 1500]), R.choice([1000, 2000, 2500, 3000]), R.choice([10000, 15000, 20000])
+        rel = R.choice(["<=", "<"])
+        s = f"한 개에 {p_}원인 과자 $x$개와 {q_}원짜리 음료수 한 개의 값은 {c}원{'이하이다' if rel == '<=' else '미만이다'}."
+        right = f"${p_}x + {q_} {REL[rel]} {c}$"
+        wr = [f"${p_}x + {q_} {REL[FLIP[rel]]} {c}$", f"${p_} + {q_}x {REL[rel]} {c}$", f"$({p_} + {q_})x {REL[rel]} {c}$", f"${p_}x - {q_} {REL[rel]} {c}$"]
+    elif kind_ == 2:
+        v, t_ = R.choice([3, 4, 5, 60, 80]), R.randint(2, 5)
+        rel = R.choice(["<", "<="])
+        s = f"$x$ km의 거리를 시속 {v} km로 갈 때 걸리는 시간은 {t_}시간{'미만이다' if rel == '<' else ' 이하이다'}."
+        right = f"$\\frac{{x}}{{{v}}} {REL[rel]} {t_}$"
+        wr = [f"${v}x {REL[rel]} {t_}$", f"$\\frac{{{v}}}{{x}} {REL[rel]} {t_}$", f"$\\frac{{x}}{{{v}}} {REL[FLIP[rel]]} {t_}$", f"$x + {v} {REL[rel]} {t_}$"]
     else:
-        right = f"${v2} {REL[hir]} {lin(m, 0, c)} {REL[lor]} {v1}$"
-        wr = [f"${v2} {REL[lor]} {lin(m, 0, c)} {REL[hir]} {v1}$", f"${v1} {REL[lor]} {lin(m, 0, c)} {REL[hir]} {v2}$",
-              f"${-v1} {REL[hir]} {lin(m, 0, c)} {REL[lor]} {-v2}$", f"${v2 + 1} {REL[hir]} {lin(m, 0, c)} {REL[lor]} {v1 + 1}$",
-              f"${v2 - 2} {REL[hir]} {lin(m, 0, c)} {REL[lor]} {v1 - 2}$"]
+        p_, q_, r_ = R.randint(2, 5), R.randint(1, 9), R.randint(2, 6)
+        need(p_ != r_)
+        s = f"$x$의 {p_}배에 {q_}를 더한 수는 $x$의 {r_}배{WORD[rel]}."
+        right = f"${p_}x + {q_} {REL[rel]} {r_}x$"
+        wr = [f"${p_}x + {q_} {REL[FLIP[rel]]} {r_}x$", f"${p_}(x + {q_}) {REL[rel]} {r_}x$", f"${p_}x {REL[rel]} {r_}x + {q_}$", f"${p_} + {q_}x {REL[rel]} {r_}x$"]
     ch, ans = mc(right, wr)
-    add(U, "식의 값의 범위", "보통", f"${lo} {REL[lor]} x {REL[hir]} {hi}$일 때, ${lin(m, 0, c)}$의 값의 범위는?", ans, choices=ch,
-        hint="각 변에 같은 수를 곱하고 더해요. 음수를 곱하면 부등호 방향이 모두 바뀌어요!",
-        explanation=f"각 변에 {m}을 곱하고 {c}를 더하면 {right.strip('$')}".replace("\\geq", "≥").replace("\\leq", "≤"),
-        steps=[f"x = {lo}일 때 {m}x + ({c}) = [[{v1}]]", f"x = {hi}일 때 {m}x + ({c}) = [[{v2}]]"])
+    return P("쉬움", f"다음 문장을 부등식으로 나타내면? \"{s}\"", ans, choices=ch,
+             hint="크지 않다 = 이하(≤), 작지 않다 = 이상(≥), 미만은 <, 초과는 >",
+             explanation="문장을 앞에서부터 차례로 식으로 옮겨요: " + right.strip("$").replace("\\geq", "≥").replace("\\leq", "≤"),
+             steps=["작지 않다 = [[이상]]", "크지 않다 = [[이하]]"])
 
-st = [("$2x - 1 > 2x + 3$", False), ("$x^{2} + 1 > x^{2} - 3x$", True), ("$3x - 4 \\leq 5$", True), ("$x + 3 = 2x$", False),
-      ("$\\frac{1}{x} > 2$", False), ("$5 - x < 4 - x$", False), ("$4x \\geq 2(x - 1)$", True), ("$x^{2} \\leq 2x$", False)]
-ch, ans = pick([st[1]] + [s for s in st if not s[1]][:4], True)
-add(U, "일차부등식", "보통", "다음 중 일차부등식인 것은?", ans, choices=ch,
-    hint="모든 항을 왼쪽으로 옮겨 정리했을 때 (일차식) > 0 꼴이 되는지 봐요.",
-    explanation="정리했을 때 x²이 지워지고 일차식만 남으면 일차부등식이에요. x가 없어지거나 등식이면 아니에요.",
-    steps=["우변을 [[좌변]]으로 옮겨 정리", "(일차식) > 0 꼴이면 [[일차부등식]]"])
 
-for _ in range(2):  # 일차부등식의 풀이: 해 고르기
-    k = rng.randint(-3, 6)
-    c1, c2 = nz(-5, 6), nz(-5, 6)
-    if c1 == c2:
-        continue
-    d0 = rng.randint(-8, 8)
-    rel = rng.choice(list(REL))
-    # c1 x + d0  rel  c2 x + e0, 해가 x ? k
+@kind(U, "부등식의 해", 12)
+def _():
+    xv = nz(-4, 5)
+    cand = []
+    for _ in range(40):
+        c1, c0, rhs = nz(-5, 5), R.randint(-8, 8), R.randint(-10, 10)
+        rel = R.choice(list(REL))
+        cand.append((f"${lin(c1, 0, c0)} {REL[rel]} {rhs}$", holds(c1 * xv + c0, rel, rhs)))
+    want = R.random() < 0.6
+    ch, ans = pick(cand, want)
+    return P("쉬움", f"다음 부등식 중 $x = {xv}$가 해{'인' if want else '가 아닌'} 것은?", ans, choices=ch,
+             hint=f"x 자리에 {xv}를 넣어서 부등식이 참이 되는지 하나씩 확인해요.",
+             explanation=f"x = {xv}를 대입해서 참·거짓을 따져 보면 답은 {ans}예요.",
+             steps=[f"x = [[{xv}]]를 대입", "참이 되면 [[해]]"])
+
+
+@kind(U, "부등식의 성질", 14)
+def _():
+    k = R.randint(2, 6)
+    big = R.random() < 0.5  # a > b 또는 a < b
+    base = ">" if big else "<"
+    opp = "<" if big else ">"
+    st = [(f"${k}a {base} {k}b$", True), (f"$-{k}a {opp} -{k}b$", True), (f"$a - {k} {base} b - {k}$", True),
+          (f"$\\frac{{a}}{{{k}}} {base} \\frac{{b}}{{{k}}}$", True), (f"${k} - a {opp} {k} - b$", True), (f"$-\\frac{{a}}{{{k}}} {opp} -\\frac{{b}}{{{k}}}$", True),
+          (f"$-\\frac{{a}}{{{k}}} {base} -\\frac{{b}}{{{k}}}$", False), (f"$-{k}a + 1 {base} -{k}b + 1$", False), (f"$a + {k} {opp} b + {k}$", False),
+          (f"${k} - 2a {base} {k} - 2b$", False), (f"${k}a - 1 {opp} {k}b - 1$", False), (f"$-{k}a {base} -{k}b$", False)]
+    want = R.random() < 0.5
+    ch, ans = pick(st, want)
+    return P("보통", f"$a {base} b$일 때, 다음 중 {'옳은' if want else '옳지 않은'} 것은?", ans, choices=ch,
+             hint="양변에 같은 음수를 곱하거나 나누면 부등호 방향이 바뀌어요. 더하고 빼는 것은 그대로예요.",
+             explanation="음수를 곱하거나 나눈 식은 부등호 방향이 바뀌고, 나머지는 그대로예요.",
+             steps=["음수를 곱하면 부등호 방향이 [[바뀐다]]", "같은 수를 더하면 방향이 [[그대로]]"])
+
+
+@kind(U, "식의 값의 범위", 12)
+def _():
+    lo = R.randint(-5, 2)
+    hi = lo + R.randint(2, 6)
+    lor, hir = R.choice(["<", "<="]), R.choice(["<", "<="])
+    m, c = nz(-4, 4, (0, 1)), R.randint(-6, 6)
+    v1, v2 = m * lo + c, m * hi + c
+    E = lin(m, 0, c)
+    if m > 0:
+        right = f"${v1} {REL[lor]} {E} {REL[hir]} {v2}$"
+        wr = [f"${v1} {REL[hir]} {E} {REL[lor]} {v2}$" if lor != hir else f"${v1} {REL[FLIP[FLIP[lor]]].replace('<', '>')} {E}$",
+              f"${v1 - 1} {REL[lor]} {E} {REL[hir]} {v2 - 1}$", f"${v1 + 1} {REL[lor]} {E} {REL[hir]} {v2 + 1}$",
+              f"${m * lo} {REL[lor]} {E} {REL[hir]} {m * hi}$", f"${v1} {REL[lor]} {E} {REL[hir]} {v2 + 2}$", f"${-v2} {REL[lor]} {E} {REL[hir]} {-v1}$"]
+    else:
+        right = f"${v2} {REL[hir]} {E} {REL[lor]} {v1}$"
+        wr = [f"${v1} {REL[lor]} {E} {REL[hir]} {v2}$", f"${v2} {REL[lor]} {E} {REL[hir]} {v1}$" if lor != hir else f"${v2 - 2} {REL[hir]} {E} {REL[lor]} {v1}$",
+              f"${-v1} {REL[hir]} {E} {REL[lor]} {-v2}$", f"${v2 + 1} {REL[hir]} {E} {REL[lor]} {v1 + 1}$", f"${v2 - 1} {REL[hir]} {E} {REL[lor]} {v1 - 1}$"]
+    ch, ans = mc(right, wr)
+    return P("보통", f"${lo} {REL[lor]} x {REL[hir]} {hi}$일 때, ${E}$의 값의 범위는?", ans, choices=ch,
+             hint="각 변에 같은 수를 곱하고 더해요. 음수를 곱하면 부등호 방향이 모두 바뀌어요!",
+             explanation=f"x = {lo} → {v1}, x = {hi} → {v2}" + (" (음수를 곱해서 방향이 바뀜)" if m < 0 else ""),
+             steps=[f"x = {lo}일 때 [[{v1}]]", f"x = {hi}일 때 [[{v2}]]"])
+
+
+@kind(U, "일차부등식 찾기", 8)
+def _():
+    pool = []
+    for _ in range(12):
+        p_, q_, r_ = nz(-5, 5), R.randint(-6, 6), R.randint(-6, 6)
+        pool += [(f"${lin(p_, 0, q_)} > {lin(p_, 0, r_)}$", False), (f"$x^{{2}} + {lin(p_, 0, 0)} > x^{{2}} {sgn(q_ or 1)}$".replace("+ -", "- "), True),
+                 (f"${lin(p_, 0, q_)} \\leq {r_}$", True), (f"${lin(p_, 0, q_)} = {lin(r_ or 2, 0, 0)}$", False), (f"$x^{{2}} + {abs(q_) + 1} > {lin(p_, 0, 0)}$", False),
+                 (f"$\\frac{{{abs(p_)}}}{{x}} > {r_}$", False), (f"${abs(p_)}(x {sgn(q_)}) \\geq {abs(p_)}x$", False)]
+    pool = [(s.replace("x^{2} + -", "x^{2} - "), t_) for s, t_ in pool]
+    want = R.random() < 0.6
+    ch, ans = pick(pool, want)
+    return P("보통", f"다음 중 일차부등식{'인' if want else '이 아닌'} 것은?", ans, choices=ch,
+             hint="모든 항을 왼쪽으로 옮겨 정리했을 때 (x에 대한 일차식) > 0 꼴(또는 <, ≥, ≤)이 되는지 봐요.",
+             explanation="정리했을 때 x²이 지워지고 일차식만 남으면 일차부등식, x가 없어지거나 등식이면 아니에요.",
+             steps=["우변을 [[좌변]]으로 옮겨 정리", "(일차식) > 0 꼴이면 [[일차부등식]]"])
+
+
+@kind(U, "일차부등식의 풀이", 14)
+def _():
+    k = R.randint(-5, 6)
+    c1, c2 = nz(-6, 6), nz(-6, 6)
+    need(c1 != c2)
+    d0 = R.randint(-9, 9)
+    rel = R.choice(list(REL))
     e0 = (c1 - c2) * k + d0
     coef = c1 - c2
     res_rel = rel if coef > 0 else FLIP[rel]
     right = f"$x {REL[res_rel]} {k}$"
-    wr = [f"$x {REL[FLIP[res_rel]]} {k}$", f"$x {REL[res_rel]} {-k}$", f"$x {REL[res_rel]} {k + 2}$", f"$x {REL[FLIP[res_rel]]} {-k}$", f"$x {REL[res_rel]} {k - 1}$"]
+    wr = [f"$x {REL[FLIP[res_rel]]} {k}$", f"$x {REL[res_rel]} {-k}$", f"$x {REL[res_rel]} {k + 1}$", f"$x {REL[FLIP[res_rel]]} {-k}$",
+          f"$x {REL[res_rel]} {k - 1}$", f"$x {REL[FLIP[res_rel]]} {k + 1}$"]
     ch, ans = mc(right, wr)
-    add(U, "일차부등식의 풀이", "보통", f"일차부등식 ${lin(c1, 0, d0)} {REL[rel]} {lin(c2, 0, e0)}$의 해는?", ans, choices=ch,
-        hint="x항은 왼쪽, 수는 오른쪽으로 이항해요. x의 계수가 음수면 나눌 때 부등호 방향이 바뀌어요.",
-        explanation=f"이항해서 정리하면 {lin(coef, 0, 0)} {PL[rel]} {e0 - d0}" + (f" → x {PL[res_rel]} {k}" if coef != 1 else ""),
-        steps=[f"이항: {lin(coef, 0, 0)} {PL[rel]} [[{e0 - d0}]]", f"x {PL[res_rel]} [[{k}]]"])
+    return P("보통", f"일차부등식 ${lin(c1, 0, d0)} {REL[rel]} {lin(c2, 0, e0)}$의 해는?", ans, choices=ch,
+             hint="x항은 왼쪽, 수는 오른쪽으로 이항해요. x의 계수가 음수면 나눌 때 부등호 방향이 바뀌어요.",
+             explanation=f"{lin(coef, 0, 0, tex=False)} {PL[rel]} {e0 - d0}" + (f" → 양변을 {coef}로 나누면 x {PL[res_rel]} {k}" if coef != 1 else ""),
+             steps=[f"이항: {lin(coef, 0, 0, tex=False)} {PL[rel]} [[{e0 - d0}]]", f"x {PL[res_rel]} [[{k}]]"])
 
-for (p1, q1, c1), (p2, q2), rel, ask in [((-2, -3, 9), (4, -3), ">=", "max"), ((5, 1, 0), (2, -2), ">", "min")]:  # 괄호
-    # p1(x+q1)+c1 rel p2(x+q2)  ... 예: -(x-2)+11 >= 3(x-4)
+
+@kind(U, "괄호가 있는 일차부등식", 14)
+def _():
     X = sp.Symbol("x")
-    L = p1 * (X + q1) + c1
-    R = p2 * (X + q2)
-    sol = sp.solve_univariate_inequality({">=": L >= R, ">": L > R}[rel], X, relational=False)
-    ints = [n for n in range(-30, 31) if sp.Interval(-sp.oo, sp.oo).contains(n) and sol.contains(n)]
-    val_ = max(ints) if ask == "max" else min(ints)
+    p1, q1, c1 = nz(-4, 4), nz(-5, 5), R.randint(-9, 9)
+    p2, q2 = nz(-4, 4), nz(-5, 5)
+    rel = R.choice(list(REL))
+    L, Rr = p1 * (X + q1) + c1, p2 * (X + q2)
+    need(p1 != p2)
+    sol = sp.solve_univariate_inequality({">": L > Rr, "<": L < Rr, ">=": L >= Rr, "<=": L <= Rr}[rel], X, relational=False)
+    ask = "max" if sol.inf == -sp.oo else "min"
+    val_ = math.floor(sol.sup) - (1 if sol.right_open and sol.sup == math.floor(sol.sup) else 0) if ask == "max" else \
+        math.ceil(sol.inf) + (1 if sol.left_open and sol.inf == math.ceil(sol.inf) else 0)
+    need(sol.contains(val_) and not sol.contains(val_ + (1 if ask == "max" else -1)))
     def grp(pp, qq):
-        inner = lin(1, 0, qq)
-        return ("-" if pp == -1 else "" if pp == 1 else str(pp)) + f"({inner})"
-    lhs = grp(p1, q1) + (f" + {c1}" if c1 > 0 else f" - {-c1}" if c1 < 0 else "")
-    add(U, "괄호가 있는 일차부등식", "보통",
-        f"일차부등식 ${lhs} {REL[rel]} {grp(p2, q2)}$를 만족시키는 {'가장 큰' if ask == 'max' else '가장 작은'} 정수 $x$의 값을 구하시오.", val_,
-        hint="분배법칙으로 괄호를 먼저 풀어요.",
-        explanation=f"풀면 {sol_text(sol)}, {'가장 큰' if ask == 'max' else '가장 작은'} 정수는 {val_}",
-        steps=[f"괄호 풀기: {fmt(sp.expand(L), (X,), False)} {PL[rel]} {fmt(sp.expand(R), (X,), False)}", f"답: [[{val_}]]"])
+        return ("-" if pp == -1 else "" if pp == 1 else str(pp)) + f"({lin(1, 0, qq)})"
+    lhs = grp(p1, q1) + (f" {sgn(c1)}" if c1 else "")
+    return P("보통", f"일차부등식 ${lhs} {REL[rel]} {grp(p2, q2)}$를 만족시키는 {'가장 큰' if ask == 'max' else '가장 작은'} 정수 $x$의 값을 구하시오.", val_,
+             hint="분배법칙으로 괄호를 먼저 풀어요.", explanation=f"정리하면 {sol_text(sol)} → {val_}",
+             steps=[f"괄호 풀기: {fmt(sp.expand(L), (X,), False)} {PL[rel]} {fmt(sp.expand(Rr), (X,), False)}", f"해: {sol_text(sol)}", f"답: [[{val_}]]"])
 
-for txt, L, R, rel, ask, hint in [  # 소수·분수 계수
-    ("0.3x - 1.2 \\leq 0.5x + 0.4", sp.Rational(3, 10) * x - sp.Rational(6, 5), sp.Rational(1, 2) * x + sp.Rational(2, 5), "<=", "min", "양변에 10을 곱해 정수 계수로 만들어요."),
-    ("\\frac{x - 1}{3} - \\frac{x + 2}{4} > 1", (x - 1) / 3 - (x + 2) / 4, sp.Integer(1), ">", "min", "분모 3과 4의 최소공배수 12를 양변에 곱해요."),
-    ("0.2(x - 3) > \\frac{1}{2}x + 0.3", sp.Rational(1, 5) * (x - 3), sp.Rational(1, 2) * x + sp.Rational(3, 10), ">", "max", "소수는 분수로 바꾸고, 분모의 최소공배수를 곱해요."),
-]:
-    sol = sp.solve_univariate_inequality({">": L > R, "<=": L <= R}[rel], x, relational=False)
-    ints = [n for n in range(-60, 61) if sol.contains(n)]
-    val_ = min(ints) if ask == "min" else max(ints)
-    add(U, "계수가 소수 또는 분수인 일차부등식", "어려움",
-        f"일차부등식 ${txt}$를 만족시키는 {'가장 작은' if ask == 'min' else '가장 큰'} 정수 $x$의 값을 구하시오.", val_,
-        hint=hint, explanation=f"정리하면 {sol_text(sol)} → {val_}",
-        steps=[f"해: {sol_text(sol)}", f"답: [[{val_}]]"])
 
-for c1, rhs, rel, k in [(-2, 7, ">=", -3), (2, 3, "<", 5)]:  # 해가 주어질 때 미지수 (c1 x + a rel rhs)
-    # c1*x + a rel rhs → x rel' (rhs - a)/c1 = k → a = rhs - c1*k
+@kind(U, "계수가 소수 또는 분수인 일차부등식", 14)
+def _():
+    X = sp.Symbol("x")
+    rel = R.choice(list(REL))
+    if R.random() < 0.5:
+        p_, q_, r_, s_ = (nz(-9, 9) for _ in range(4))
+        need(p_ != r_)
+        L, Rr = Q(F(p_, 10)) * X + Q(F(q_, 10)), Q(F(r_, 10)) * X + Q(F(s_, 10))
+        def dx(c):
+            return f"{c / 10:g}x"
+        def dc(c):
+            return f"+ {c / 10:g}" if c > 0 else f"- {-c / 10:g}"
+        txt = f"{dx(p_)} {dc(q_)} {REL[rel]} {dx(r_)} {dc(s_)}"
+        hint = "양변에 10을 곱해 정수 계수로 만들어요."
+    else:
+        m, n = R.choice([(2, 3), (3, 4), (2, 5), (3, 2), (4, 6), (2, 4)])
+        p_, q_, c = R.randint(-5, 5), R.randint(-5, 5), R.randint(-3, 3)
+        L, Rr = (X + p_) / m - (X + q_) / n, sp.Integer(c)
+        need(m != n)
+        txt = f"\\frac{{{lin(1, 0, p_)}}}{{{m}}} - \\frac{{{lin(1, 0, q_)}}}{{{n}}} {REL[rel]} {c}"
+        hint = f"분모 {m}과 {n}의 최소공배수를 양변에 곱해요."
+    sol = sp.solve_univariate_inequality({">": L > Rr, "<": L < Rr, ">=": L >= Rr, "<=": L <= Rr}[rel], X, relational=False)
+    need(isinstance(sol, sp.Interval))
+    ask = "max" if sol.inf == -sp.oo else "min"
+    ints = [k for k in range(-200, 201) if sol.contains(k)]
+    need(ints)
+    val_ = max(ints) if ask == "max" else min(ints)
+    need(-60 <= val_ <= 60)
+    return P("어려움", f"일차부등식 ${txt}$를 만족시키는 {'가장 큰' if ask == 'max' else '가장 작은'} 정수 $x$의 값을 구하시오.", val_,
+             hint=hint, explanation=f"정리하면 {sol_text(sol)} → {val_}", steps=[f"해: {sol_text(sol)}", f"답: [[{val_}]]"])
+
+
+@kind(U, "해가 주어질 때 미지수 구하기", 12)
+def _():
+    c1, rhs, k = nz(-5, 5, (0, 1, -1)), R.randint(-9, 9), nz(-6, 6)
+    rel = R.choice(list(REL))
     aval = rhs - c1 * k
     res_rel = rel if c1 > 0 else FLIP[rel]
-    add(U, "해가 주어질 때 미지수 구하기", "보통",
-        f"일차부등식 ${c1}x + a {REL[rel]} {rhs}$의 해가 $x {REL[res_rel]} {k}$일 때, 수 $a$의 값을 구하시오.", aval,
-        hint="a를 수처럼 두고 부등식을 푼 뒤, 주어진 해와 비교해요.",
-        explanation=f"x {PL[res_rel]} ({rhs} - a)/({c1}) 이므로 ({rhs} - a)/({c1}) = {k} → a = {aval}",
-        steps=[f"({rhs} - a) ÷ ({c1}) = {k}", f"a = [[{aval}]]"])
+    return P("보통", f"$x$에 대한 일차부등식 ${c1}x + a {REL[rel]} {rhs}$의 해가 $x {REL[res_rel]} {k}$일 때, 수 $a$의 값을 구하시오.", aval,
+             hint="a를 수처럼 두고 부등식을 푼 뒤, 주어진 해와 비교해요.",
+             explanation=f"{c1}x {PL[rel]} {rhs} - a → x {PL[res_rel]} ({rhs} - a) ÷ ({c1}) 이므로 ({rhs} - a) ÷ ({c1}) = {k} → a = {aval}",
+             steps=[f"({rhs} - a) ÷ ({c1}) = {k}", f"a = [[{aval}]]"])
 
-for sign in ("<", ">"):  # 계수가 문자인 일차부등식: a<0 일 때 ax > 3a
-    if sign == "<":
-        right = "$x < 3$"
-        wr = ["$x > 3$", "$x < -3$", "$x > -3$", "$x < \\frac{1}{3}$"]
-        q = "$a < 0$일 때, $x$에 대한 일차부등식 $ax > 3a$의 해는?"
-        ex = "a < 0 이므로 양변을 a로 나누면 부등호 방향이 바뀌어 x < 3"
-    else:
-        right = "$x \\geq -\\frac{2}{a}$"
-        wr = ["$x \\leq -\\frac{2}{a}$", "$x \\geq \\frac{2}{a}$", "$x \\leq \\frac{2}{a}$", "$x \\geq -2a$"]
-        q = "$a > 0$일 때, $x$에 대한 일차부등식 $ax + 5 \\geq 3$의 해는?"
-        ex = "ax ≥ -2, a > 0 이므로 방향 그대로 x ≥ -2/a"
+
+@kind(U, "계수가 문자인 일차부등식", 10)
+def _():
+    sign_ = R.choice(["<", ">"])
+    k = nz(-6, 6)
+    rel = R.choice(list(REL))
+    res = rel if sign_ == ">" else FLIP[rel]
+    m = nz(-5, 5)
+    # a x + m a  rel  k a  ->  a(x + m) rel k a -> x + m res k -> x res k - m
+    rr = k - m
+    right = f"$x {REL[res]} {rr}$"
+    wr = [f"$x {REL[FLIP[res]]} {rr}$", f"$x {REL[res]} {-rr}$", f"$x {REL[FLIP[res]]} {-rr}$", f"$x {REL[res]} {k + m}$", f"$x {REL[res]} {k}$"]
     ch, ans = mc(right, wr)
-    add(U, "계수가 문자인 일차부등식", "어려움", q, ans, choices=ch,
-        hint="문자로 나눌 때 그 문자가 양수인지 음수인지 꼭 확인해요.", explanation=ex,
-        steps=["음수로 나누면 부등호 방향이 [[바뀐다]]"])
+    return P("어려움", f"$a {sign_} 0$일 때, $x$에 대한 일차부등식 $ax {sgn(m)}a {REL[rel]} {k}a$의 해는?".replace("+ 1a", "+ a").replace("- 1a", "- a").replace(" 1a", " a").replace("-1a", "-a"), ans, choices=ch,
+             hint="문자로 나눌 때 그 문자가 양수인지 음수인지 꼭 확인해요. 음수면 방향이 바뀌어요.",
+             explanation=f"양변을 a로 나누면" + (" (a < 0이라 방향이 바뀜)" if sign_ == "<" else "") + f" x {sgn(m)} {PL[res]} {k} → x {PL[res]} {rr}",
+             steps=["음수로 나누면 부등호 방향이 [[바뀐다]]", f"x {PL[res]} [[{rr}]]"])
 
-# 일차부등식의 활용 (수, 최대 개수, 도형, 추가 요금, 예금, 거리·속력·시간, 유리한 방법)
-nmax = max(n for n in range(1, 200) if 4 * n + 3 < 2 * n + 15)
-add(U, "활용: 수", "보통", "자연수 x를 4배 한 수에 3을 더하면, x를 2배 한 수에 15를 더한 것보다 작다. 이러한 자연수 x 중 가장 큰 수를 구하시오.", nmax,
-    hint="부등식을 세워요: 4x + 3 < 2x + 15", explanation=f"4x + 3 < 2x + 15 → 2x < 12 → x < 6 → 가장 큰 자연수 {nmax}",
-    steps=["4x + 3 < 2x + 15", "2x < [[12]]", f"가장 큰 자연수: [[{nmax}]]"])
-pens = max(k for k in range(0, 21) if 1200 * k + 900 * (20 - k) <= 21000)  # 최대 개수
-add(U, "활용: 최대 개수", "보통",
-    "한 개에 900원인 공책과 한 개에 1200원인 펜을 합하여 20개를 사려고 한다. 전체 가격을 21000원 이하로 할 때, 펜은 최대 몇 개까지 살 수 있는지 구하시오.",
-    pens, hint="펜을 x개라 하면 공책은 (20 - x)개예요.",
-    explanation=f"1200x + 900(20 - x) ≤ 21000 → 300x ≤ 3000 → x ≤ 10",
-    steps=["1200x + 900(20 - x) ≤ 21000", "300x ≤ [[3000]]", "펜은 최대 [[10]]개"])
-assert pens == 10
-hmin = min(h for h in range(1, 100) if (5 + 9) * h / 2 >= 56)
-add(U, "활용: 도형", "보통", "윗변의 길이가 5 cm, 아랫변의 길이가 9 cm인 사다리꼴의 넓이가 56 cm² 이상이 되게 하려면, 높이는 몇 cm 이상이어야 하는지 구하시오.", hmin,
-    hint="사다리꼴의 넓이 = (윗변 + 아랫변) × 높이 ÷ 2", explanation=f"(5 + 9) × h ÷ 2 ≥ 56 → 7h ≥ 56 → h ≥ 8",
-    steps=["7h ≥ [[56]]", "h ≥ [[8]]"])
-nmin = min(n for n in range(11, 200) if 10 * 2500 + (n - 10) * 1800 > n * 2200)
-add(U, "활용: 추가 요금", "어려움",
-    "어느 체험관의 입장료는 10명까지는 한 사람에 2500원이고, 10명을 넘으면 넘은 사람은 한 사람에 1800원이다. 한 사람의 평균 입장료가 2200원보다 적어지려면 최소 몇 명이 입장해야 하는지 구하시오.",
-    min(n for n in range(11, 200) if 10 * 2500 + (n - 10) * 1800 < n * 2200),
-    hint="x명이 입장한다고 하면 전체 요금은 25000 + 1800(x - 10)원이에요.",
-    explanation="25000 + 1800(x - 10) < 2200x → 7000 < 400x → x > 17.5 → 18명",
-    steps=["25000 + 1800(x - 10) < 2200x", "400x > [[7000]]", "최소 [[18]]명"])
-assert min(n for n in range(11, 200) if 10 * 2500 + (n - 10) * 1800 < n * 2200) == 18
-mo = min(m for m in range(1, 100) if 30000 + 4000 * m > 2 * (50000 + 1000 * m))
-add(U, "활용: 예금액", "어려움",
-    "현재 지수의 통장에는 30000원, 동생의 통장에는 50000원이 있다. 다음 달부터 지수는 매달 4000원씩, 동생은 매달 1000원씩 예금한다면, 지수의 예금액이 처음으로 동생의 예금액의 2배보다 많아지는 것은 몇 개월 후인지 구하시오.",
-    mo, hint="x개월 후 지수: 30000 + 4000x, 동생: 50000 + 1000x",
-    explanation=f"30000 + 4000x > 2(50000 + 1000x) → 2000x > 70000 → x > 35 → {mo}개월 후",
-    steps=["30000 + 4000x > 2(50000 + 1000x)", "2000x > [[70000]]", f"[[{mo}]]개월 후"])
-dmax = max(F(d, 10) for d in range(1, 200) if F(d, 10) / 2 + F(d, 10) / 3 <= F(5, 2))
-add(U, "활용: 거리, 속력, 시간", "어려움",
-    "호수 둘레길의 어느 지점까지 갈 때는 시속 2 km로, 돌아올 때는 같은 길을 시속 3 km로 걸어서 2시간 30분 이내로 다녀오려고 한다. 최대 몇 km 떨어진 지점까지 다녀올 수 있는지 구하시오.",
-    fpl(dmax), hint="시간 = 거리 ÷ 속력. 2시간 30분 = 5/2시간",
-    explanation=f"x/2 + x/3 ≤ 5/2 → 3x + 2x ≤ 15 → x ≤ 3",
-    steps=["x/2 + x/3 ≤ [[5/2]]", "5x ≤ [[15]]", f"최대 [[{fpl(dmax)}]] km"])
-assert dmax == 3
-nn = min(n for n in range(1, 200) if 800 * n * 0.8 + 1500 < 800 * n)
-add(U, "활용: 유리한 방법 선택", "어려움",
-    "동네 가게에서 한 개에 800원인 아이스크림을 할인 마트에서는 20% 할인된 가격에 판다. 할인 마트에 다녀오는 데 왕복 교통비가 1500원이 든다면, 아이스크림을 최소 몇 개 이상 살 때 할인 마트에서 사는 것이 유리한지 구하시오.",
-    nn, hint="x개를 산다고 하면: 동네 가게 800x원, 할인 마트 640x + 1500원",
-    explanation=f"640x + 1500 < 800x → 160x > 1500 → x > 9.375 → {nn}개",
-    steps=["640x + 1500 < 800x", "160x > [[1500]]", f"최소 [[{nn}]]개"])
+
+def word_ineq(level, concept, q, ans_, hint, ex, steps):
+    return P(level, q, ans_, hint=hint, explanation=ex, steps=steps)
+
+
+@kind(U, "일차부등식의 활용: 수", 12)
+def _():
+    if R.random() < 0.5:
+        p_, q_, r_, s_ = R.randint(3, 7), R.randint(1, 9), R.randint(2, 4), R.randint(5, 30)
+        need(p_ > r_)
+        n = max(k for k in range(1, 500) if p_ * k + q_ < r_ * k + s_) if any(p_ * k + q_ < r_ * k + s_ for k in range(1, 500)) else None
+        need(n)
+        return word_ineq("보통", "", f"자연수 $x$를 {p_}배 한 수에 {q_}를 더하면, $x$를 {r_}배 한 수에 {s_}를 더한 것보다 작다. 이러한 자연수 $x$ 중 가장 큰 수를 구하시오.", n,
+                         f"부등식을 세워요: {p_}x + {q_} < {r_}x + {s_}", f"{p_ - r_}x < {s_ - q_} → 가장 큰 자연수 {n}",
+                         [f"{p_ - r_}x < [[{s_ - q_}]]", f"가장 큰 자연수: [[{n}]]"])
+    odd = R.random() < 0.5
+    k, lim = R.randint(2, 4), R.randint(30, 90)
+    # 연속하는 두 짝수/홀수: 작은 수 n, 큰 수 n+2, (작은 수)×k + (큰 수) <= lim, 가장 큰 두 수
+    cands = [n for n in range(1, 200) if n % 2 == (1 if odd else 0) and n * k + (n + 2) <= lim]
+    need(cands)
+    n = max(cands)
+    return word_ineq("보통", "", f"연속하는 두 {'홀수' if odd else '짝수'}가 있다. 작은 수의 {k}배와 큰 수의 합이 {lim} 이하일 때, 큰 수가 될 수 있는 가장 큰 수를 구하시오.", n + 2,
+                     f"작은 수를 x로 놓으면 큰 수는 x + 2", f"{k}x + (x + 2) ≤ {lim} → x ≤ {fpl(F(lim - 2, k + 1))} → 작은 수 {n}, 큰 수 {n + 2}",
+                     [f"{k + 1}x + 2 ≤ {lim}", f"작은 수: [[{n}]]", f"큰 수: [[{n + 2}]]"])
+
+
+@kind(U, "일차부등식의 활용: 최대 개수", 12)
+def _():
+    p1, p2 = R.choice([(700, 1000), (900, 1200), (800, 1500), (1200, 1600), (500, 900), (1500, 2000)])
+    tot = R.randint(10, 25)
+    money = R.randint(p1 * tot // 100 + 1, p2 * tot // 100 - 1) * 100
+    k = max(k for k in range(0, tot + 1) if p2 * k + p1 * (tot - k) <= money)
+    need(0 < k < tot)
+    items = R.choice([("공책", "볼펜"), ("사과", "배"), ("연필", "색연필"), ("빵", "케이크 조각"), ("엽서", "스티커북")])
+    return word_ineq("보통", "", f"한 개에 {p1}원인 {josa(items[0], '과')} 한 개에 {p2}원인 {josa(items[1], '을')} 합하여 {tot}개를 사려고 한다. 전체 가격을 {money}원 이하로 할 때, {josa(items[1], '은')} 최대 몇 개까지 살 수 있는지 구하시오.",
+                     k, f"{josa(items[1], '을')} x개라 하면 {josa(items[0], '은')} ({tot} - x)개예요.",
+                     f"{p2}x + {p1}({tot} - x) ≤ {money} → {p2 - p1}x ≤ {money - p1 * tot} → x ≤ {fpl(F(money - p1 * tot, p2 - p1))}",
+                     [f"{p2 - p1}x ≤ [[{money - p1 * tot}]]", f"최대 [[{k}]]개"])
+
+
+@kind(U, "일차부등식의 활용: 도형", 12)
+def _():
+    if R.random() < 0.5:
+        t_, bt = R.randint(2, 8), R.randint(4, 12)
+        S = R.randint(10, 80)
+        h = min(h for h in range(1, 300) if (t_ + bt) * h / 2 >= S)
+        return word_ineq("보통", "", f"윗변의 길이가 {t_} cm, 아랫변의 길이가 {bt} cm인 사다리꼴의 넓이가 {S} cm² 이상이 되게 하려면, 높이는 최소 몇 cm이어야 하는지 구하시오. (단, 높이는 자연수)",
+                         h, "사다리꼴의 넓이 = (윗변 + 아랫변) × 높이 ÷ 2", f"({t_} + {bt}) × h ÷ 2 ≥ {S} → h ≥ {fpl(F(2 * S, t_ + bt))} → {h}",
+                         [f"{t_ + bt}h ÷ 2 ≥ {S}", f"h ≥ [[{fpl(F(2 * S, t_ + bt))}]]", f"최소 [[{h}]] cm"])
+    d, P_ = R.randint(3, 15), R.randint(40, 120)
+    w = max(w for w in range(1, 200) if 2 * (w + w + d) <= P_)
+    return word_ineq("보통", "", f"가로의 길이가 세로의 길이보다 {d} cm 더 긴 직사각형의 둘레의 길이가 {P_} cm 이하일 때, 세로의 길이는 최대 몇 cm인지 구하시오. (단, 길이는 자연수)",
+                     w, "세로를 x cm라 하면 가로는 (x + d) cm, 둘레 = 2 × (가로 + 세로)",
+                     f"2(x + x + {d}) ≤ {P_} → 4x ≤ {P_ - 2 * d} → x ≤ {fpl(F(P_ - 2 * d, 4))}",
+                     [f"4x ≤ [[{P_ - 2 * d}]]", f"최대 [[{w}]] cm"])
+
+
+@kind(U, "일차부등식의 활용: 추가 요금", 12)
+def _():
+    base_n = R.choice([4, 5, 10])
+    p1 = R.choice([2000, 2500, 3000, 4000])
+    p2 = p1 - R.choice([500, 800, 1000, 1200])
+    avg = R.randint(p2 // 100 + 1, p1 // 100 - 1) * 100
+    cands = [n for n in range(base_n + 1, 500) if base_n * p1 + (n - base_n) * p2 < n * avg]
+    need(cands)
+    n = min(cands)
+    place = R.choice(["체험관", "수영장", "박물관", "놀이 시설"])
+    return word_ineq("어려움", "", f"어느 {place}의 입장료는 {base_n}명까지는 한 사람에 {p1}원이고, {base_n}명을 넘으면 넘은 사람은 한 사람에 {p2}원이다. 한 사람의 평균 입장료가 {avg}원보다 적어지려면 최소 몇 명이 입장해야 하는지 구하시오.",
+                     n, f"x명이 입장하면 전체 요금은 {base_n * p1} + {p2}(x - {base_n})원",
+                     f"{base_n * p1} + {p2}(x - {base_n}) < {avg}x → x > {fpl(F(base_n * (p1 - p2), avg - p2))} → {n}명",
+                     [f"{base_n * p1} + {p2}(x - {base_n}) < {avg}x", f"최소 [[{n}]]명"])
+
+
+@kind(U, "일차부등식의 활용: 예금액", 12)
+def _():
+    a0, b0 = R.randint(1, 8) * 10000, R.randint(2, 10) * 10000
+    da, db = R.randint(2, 8) * 1000, R.randint(1, 4) * 1000
+    k = R.choice([1, 2])
+    cands = [m for m in range(1, 200) if a0 + da * m > k * (b0 + db * m)]
+    need(cands and da > k * db)
+    m = min(cands)
+    need(2 <= m <= 24)
+    who = R.choice([("지수", "동생"), ("민호", "누나"), ("서연", "오빠")])
+    cond = "많아지는" if k == 1 else "2배보다 많아지는"
+    return word_ineq("어려움", "", f"현재 {who[0]}의 통장에는 {a0}원, {who[1]}의 통장에는 {b0}원이 있다. 다음 달부터 {josa(who[0], '는')} 매달 {da}원씩, {josa(who[1], '는')} 매달 {db}원씩 예금한다면, {who[0]}의 예금액이 처음으로 {who[1]}의 예금액{'보다' if k == 1 else '의'} {cond} 것은 몇 개월 후인지 구하시오.".replace("예금액보다 많아지는", "예금액보다 많아지는"),
+                     m, f"x개월 후 {who[0]}: {a0} + {da}x, {who[1]}: {b0} + {db}x",
+                     f"{a0} + {da}x > {k if k > 1 else ''}({b0} + {db}x) → x > {fpl(F(k * b0 - a0, da - k * db))} → {m}개월 후",
+                     [f"{a0} + {da}x > {k if k > 1 else ''}({b0} + {db}x)", f"[[{m}]]개월 후"])
+
+
+@kind(U, "일차부등식의 활용: 거리, 속력, 시간", 12)
+def _():
+    if R.random() < 0.5:
+        v1, v2 = R.choice([(2, 3), (3, 4), (2, 4), (3, 5), (4, 6)])
+        tt = F(R.randint(2, 8), 2)
+        dmax = tt * v1 * v2 / (v1 + v2)
+        need(dmax.denominator <= 5)
+        h, mi = int(tt), int((tt - int(tt)) * 60)
+        tstr = f"{h}시간" + (f" {mi}분" if mi else "")
+        return word_ineq("어려움", "", f"어느 지점까지 갈 때는 시속 {v1} km로, 돌아올 때는 같은 길을 시속 {v2} km로 걸어서 {tstr} 이내로 다녀오려고 한다. 최대 몇 km 떨어진 지점까지 다녀올 수 있는지 구하시오.",
+                         fpl(dmax), f"시간 = 거리 ÷ 속력. {tstr} = {fpl(tt)}시간",
+                         f"x/{v1} + x/{v2} ≤ {fpl(tt)} → x ≤ {fpl(dmax)}", [f"x/{v1} + x/{v2} ≤ [[{fpl(tt)}]]", f"최대 [[{fpl(dmax)}]] km"])
+    D = R.randint(3, 12)
+    vw, vr = R.choice([(3, 6), (4, 8), (3, 9), (4, 12), (2, 6)])
+    tt = F(R.randint(2, 6), 2)
+    # 걷다가 뛰기: 걸은 거리 x, 뛴 거리 D - x, 시간 x/vw + (D-x)/vr <= tt -> x <= ...
+    xmax = (tt - F(D, vr)) / (F(1, vw) - F(1, vr))
+    need(0 < xmax < D and xmax.denominator <= 4)
+    h, mi = int(tt), int((tt - int(tt)) * 60)
+    tstr = f"{h}시간" + (f" {mi}분" if mi else "")
+    return word_ineq("어려움", "", f"집에서 {D} km 떨어진 공원까지 가는데, 처음에는 시속 {vw} km로 걷다가 도중에 시속 {vr} km로 뛰어서 {tstr} 이내에 도착하려고 한다. 걸은 거리는 최대 몇 km인지 구하시오.",
+                     fpl(xmax), f"걸은 거리 x km, 뛴 거리 ({D} - x) km. 시간 = 거리 ÷ 속력",
+                     f"x/{vw} + ({D} - x)/{vr} ≤ {fpl(tt)} → x ≤ {fpl(xmax)}", [f"x/{vw} + ({D} - x)/{vr} ≤ [[{fpl(tt)}]]", f"최대 [[{fpl(xmax)}]] km"])
+
+
+@kind(U, "일차부등식의 활용: 유리한 방법 선택", 12)
+def _():
+    if R.random() < 0.5:
+        price = R.choice([600, 800, 1000, 1200, 1500, 2000])
+        disc = R.choice([10, 20, 25, 30])
+        fare = R.choice([1000, 1200, 1500, 2000, 2500])
+        cands = [n for n in range(1, 500) if price * n * (100 - disc) / 100 + fare < price * n]
+        n = min(cands)
+        item = R.choice(["아이스크림", "음료수", "공책", "과자"])
+        return word_ineq("어려움", "", f"동네 가게에서 한 개에 {price}원인 {josa(item, '을')} 할인 매장에서는 {disc}% 할인된 가격에 판다. 할인 매장에 다녀오는 왕복 교통비가 {fare}원일 때, {josa(item, '을')} 최소 몇 개 이상 사야 할인 매장에서 사는 것이 유리한지 구하시오.",
+                         n, f"x개를 산다면: 동네 가게 {price}x원, 할인 매장 {price * (100 - disc) // 100}x + {fare}원",
+                         f"{price * (100 - disc) / 100:g}x + {fare} < {price}x → x > {fpl(F(fare * 100, price * disc))} → {n}개",
+                         [f"{price * (100 - disc) / 100:g}x + {fare} < {price}x", f"최소 [[{n}]]개"])
+    fee, per_m, per = R.choice([(10000, 3000, 5000), (20000, 2000, 4000), (15000, 2500, 4000), (12000, 1000, 2500)])
+    cands = [n for n in range(1, 200) if fee + per_m * n < per * n]
+    n = min(cands)
+    return word_ineq("어려움", "", f"어느 수영장의 1회 입장료는 {per}원이다. 연회원은 가입비 {fee}원을 내고 1회에 {per_m}원만 내면 된다. 한 해에 최소 몇 회 이상 이용해야 연회원이 유리한지 구하시오.",
+                     n, f"x회 이용하면: 일반 {per}x원, 연회원 {fee} + {per_m}x원",
+                     f"{fee} + {per_m}x < {per}x → x > {fpl(F(fee, per - per_m))} → {n}회", [f"{fee} + {per_m}x < {per}x", f"최소 [[{n}]]회"])
+
 
 # ═════════════════════ 5. 연립일차방정식 ═════════════════════
 U = "5. 연립일차방정식"
-st = [("$3x - y = 2$", True), ("$x + y^{2} = 4$", False), ("$2x + 3 = x - 1$", False), ("$xy + 2 = 0$", False), ("$\\frac{1}{x} + y = 1$", False),
-      ("$x + 2y = 2y - 3$", False), ("$2(x + y) = x + 5$", True)]
-ch, ans = pick([st[0]] + [s for s in st if not s[1]][:4], True)
-add(U, "미지수가 2개인 일차방정식", "쉬움", "다음 중 미지수가 2개인 일차방정식은?", ans, choices=ch,
-    hint="정리했을 때 ax + by + c = 0 (a ≠ 0, b ≠ 0) 꼴인지 봐요.",
-    explanation="x와 y가 모두 남고 차수가 1인 등식이어야 해요. y가 지워지거나 제곱·곱·분모에 문자가 있으면 아니에요.",
-    steps=["정리하면 ax + by + c = 0, a ≠ 0, [[b ≠ 0]]"])
-A1, B1, C1 = 2, -3, 4
-cand = [(5, 2), (2, 0), (-1, -2), (1, -1), (3, 1), (-4, -4), (8, 4)]
-st = [(f"$({px}, {py})$", A1 * px + B1 * py == C1) for px, py in cand]
-fl = [s for s in st if not s[1]]
-tr = [s for s in st if s[1]]
-ch, ans = pick([fl[0]] + tr[:4], False)
-add(U, "일차방정식의 해", "쉬움", f"다음 중 일차방정식 ${lin(A1, B1)} = {C1}$의 해가 아닌 것은?", ans, choices=ch,
-    hint="x, y 값을 넣어서 등식이 성립하는지 하나씩 확인해요.",
-    explanation="대입해서 좌변이 4가 되지 않는 순서쌍이 해가 아니에요.",
-    steps=["(x, y)를 대입해 좌변 = [[4]]인지 확인"])
-for A1, B1, C1 in [(1, 3, 17), (2, 3, 24)]:  # 자연수 해 개수
-    sols = [(i, j) for i in range(1, 50) for j in range(1, 50) if A1 * i + B1 * j == C1]
-    add(U, "자연수인 해 구하기", "보통", f"$x$, $y$의 값이 자연수일 때, 일차방정식 ${lin(A1, B1)} = {C1}$의 해의 개수를 구하시오.", len(sols),
-        hint="y에 1, 2, 3, ...을 차례로 넣어 x도 자연수가 되는 것을 찾아요.",
-        explanation="해: " + ", ".join(f"({i}, {j})" for i, j in sols),
-        steps=[f"해: " + ", ".join(f"({i}, {j})" for i, j in sols), f"개수: [[{len(sols)}]]"])
-for (px, py), A1, C1, where in [((4, 2), 3, 10, "y"), ((-3, 2), 5, 4, "x")]:  # 한 해가 주어질 때 계수
-    if where == "y":  # 2x - ay = 11
-        aval = F(A1 * px - C1, py)
-        q = f"일차방정식 ${A1}x - ay = {C1}$의 한 해가 $({px}, {py})$일 때, 수 $a$의 값을 구하시오."
-        ex = f"{A1}×{px} - a×{py} = {C1} → a = {fpl(aval)}"
-    else:  # ax + 4y = -2
-        aval = F(C1 - A1 * py, px)
-        q = f"일차방정식 $ax + {A1}y = {C1}$의 한 해가 $({px}, {py})$일 때, 수 $a$의 값을 구하시오."
-        ex = f"a×({px}) + {A1}×{py} = {C1} → a = {fpl(aval)}"
-    add(U, "해가 주어질 때 계수 구하기", "보통", q, fpl(aval), hint="해를 방정식에 대입하면 등식이 성립해요.", explanation=ex,
-        steps=[f"x = {px}, y = {py}를 대입", f"a = [[{fpl(aval)}]]"])
 
-for sx, sy in [(4, -1), (-2, 3)]:  # 연립방정식의 해 고르기
+
+def eq_tex(a1, b1, c1):
+    return f"{lin(a1, b1)} = {c1}"
+
+
+@kind(U, "미지수가 2개인 일차방정식", 8)
+def _():
+    p_, q_, r_ = nz(-5, 5), nz(-5, 5), R.randint(-9, 9)
+    pool = [(f"${lin(p_, q_)} = {r_}$", True), (f"${lin(p_, 0, r_)} = {lin(q_, 0, 0)}$", False), (f"$x + y^{{2}} = {abs(r_) + 1}$", False),
+            (f"$xy {sgn(abs(r_) + 1)} = 0$", False), (f"$\\frac{{1}}{{x}} + y = {abs(q_)}$", False), (f"$x {sgn(q_)}y = {q_}y {sgn(r_)}$", False),
+            (f"${abs(p_)}(x + y) = {abs(p_)}x {sgn(r_)}$", False), (f"$x^{{2}} + y = x^{{2}} {sgn(q_)}x$", True), (f"${lin(p_, q_, 0)} = {lin(p_, 0, r_)}$", False),
+            (f"$\\frac{{x}}{{{abs(p_) + 1}}} - y = {r_}$", True)]
+    want = R.random() < 0.6
+    ch, ans = pick(pool, want)
+    return P("쉬움", f"다음 중 미지수가 2개인 일차방정식{'인' if want else '이 아닌'} 것은?", ans, choices=ch,
+             hint="정리했을 때 ax + by + c = 0 (a ≠ 0, b ≠ 0) 꼴인지 봐요. 한 문자가 지워지면 아니에요.",
+             explanation="모든 항을 왼쪽으로 옮겨 정리했을 때 x와 y가 모두 남고 차수가 1인 등식이어야 해요.",
+             steps=["정리: ax + by + c = 0, a ≠ 0, [[b ≠ 0]]"])
+
+
+@kind(U, "일차방정식의 해", 12)
+def _():
+    A1, B1 = nz(-4, 4), nz(-4, 4)
+    sols = [(i, j) for i in range(-6, 7) for j in range(-6, 7)]
+    C1 = A1 * R.randint(-4, 4) + B1 * R.randint(-4, 4)
+    good = [(i, j) for i, j in sols if A1 * i + B1 * j == C1]
+    bad = [(i, j) for i, j in sols if A1 * i + B1 * j != C1]
+    need(len(good) >= 4)
+    want = R.random() < 0.5
+    pool = [(f"$({i}, {j})$", True) for i, j in R.sample(good, min(6, len(good)))] + [(f"$({i}, {j})$", False) for i, j in R.sample(bad, 6)]
+    ch, ans = pick(pool, want)
+    return P("쉬움", f"다음 중 일차방정식 ${eq_tex(A1, B1, C1)}$의 해{'인' if want else '가 아닌'} 것은?", ans, choices=ch,
+             hint="x, y 값을 넣어서 등식이 성립하는지 하나씩 확인해요.",
+             explanation=f"각 순서쌍을 대입해 좌변이 {C1}가 되는지 확인해요.", steps=[f"좌변 = [[{C1}]]이면 해"])
+
+
+@kind(U, "x, y가 자연수인 해", 12)
+def _():
+    A1, B1 = R.randint(1, 5), R.randint(1, 5)
+    C1 = R.randint(8, 40)
+    sols = [(i, j) for i in range(1, 50) for j in range(1, 50) if A1 * i + B1 * j == C1]
+    need(1 <= len(sols) <= 8)
+    return P("보통", f"$x$, $y$의 값이 자연수일 때, 일차방정식 ${eq_tex(A1, B1, C1)}$의 해의 개수를 구하시오.", len(sols),
+             hint="y(또는 x)에 1, 2, 3, ...을 차례로 넣어 다른 문자도 자연수가 되는 것만 찾아요.",
+             explanation="해: " + ", ".join(f"({i}, {j})" for i, j in sols),
+             steps=["해: " + ", ".join(f"({i}, {j})" for i, j in sols), f"개수: [[{len(sols)}]]"])
+
+
+@kind(U, "해가 주어질 때 계수 구하기", 12)
+def _():
+    px, py = nz(-5, 5), nz(-5, 5)
+    A1, av = nz(-5, 5), nz(-6, 6)
+    if R.random() < 0.5:
+        C1 = A1 * px - av * py
+        q = f"일차방정식 ${A1}x - ay = {C1}$의 한 해가 $({px}, {py})$일 때, 수 $a$의 값을 구하시오."
+        ex = f"{A1}×({px}) - a×({py}) = {C1} → a = {av}"
+    else:
+        C1 = av * px + A1 * py
+        q = f"일차방정식 $ax {sgn(A1)}y = {C1}$의 한 해가 $({px}, {py})$일 때, 수 $a$의 값을 구하시오.".replace("+ 1y", "+ y").replace("- 1y", "- y")
+        ex = f"a×({px}) + ({A1})×({py}) = {C1} → a = {av}"
+    return P("보통", q, av, hint="해를 방정식에 대입하면 등식이 성립해요.", explanation=ex, steps=[f"x = {px}, y = {py} 대입", f"a = [[{av}]]"])
+
+
+@kind(U, "연립방정식의 해", 10)
+def _():
+    sx, sy = nz(-5, 5), nz(-5, 5)
     sys_ = []
-    while len(sys_) < 14:
-        a1, b1, a2, b2 = nz(-3, 3), nz(-3, 3), nz(-3, 3), nz(-3, 3)
+    for _ in range(30):
+        a1, b1, a2, b2 = (nz(-3, 3) for _ in range(4))
         if a1 * b2 == a2 * b1:
             continue
-        c1 = a1 * sx + b1 * sy
-        c2 = a2 * sx + b2 * sy + rng.choice([0, 0, 1, -1, 2])
-        ok = a2 * sx + b2 * sy == c2
-        sys_.append((f"$\\begin{{cases}} {lin(a1, b1)} = {c1} \\\\ {lin(a2, b2)} = {c2} \\end{{cases}}$", ok))
-    tr = [s for s in sys_ if s[1]]; fl = [s for s in sys_ if not s[1]]
-    if not tr or len(fl) < 4:
-        continue
-    ch, ans = pick([tr[0]] + fl[:4], True)
-    add(U, "연립방정식의 해", "보통", f"다음 연립방정식 중 $x = {sx}$, $y = {sy}$가 해인 것은?", ans, choices=ch,
-        hint="두 식 모두에 대입해서 둘 다 성립해야 해요.",
-        explanation="두 방정식을 동시에 만족시키는 것을 찾아요.",
-        steps=["두 식 [[모두]] 성립해야 해"])
-
-for (sx, sy), (a1, b1), (a2, b2) in [((3, -1), (2, 1), (1, 1)), ((2, 1), (3, -1), (1, 2))]:  # 계수가 문자: ax + by 꼴
-    # ax + 2y = c1, bx - y = c2 (해가 주어짐) -> a, b
-    c1v, c2v = a1 * sx + 2 * sy, b1 * sx - sy
-    add(U, "연립방정식의 계수가 문자", "보통",
-        f"연립방정식 $\\begin{{cases}} ax + 2y = {c1v} \\\\ bx - y = {c2v} \\end{{cases}}$의 해가 $x = {sx}$, $y = {sy}$일 때, 수 $a$, $b$에 대하여 $a + b$의 값을 구하시오.",
-        a1 + b1, hint="해를 두 식에 각각 대입해요.",
-        explanation=f"{sx}a + ({2 * sy}) = {c1v} → a = {a1}, {sx}b - ({sy}) = {c2v} → b = {b1}",
-        steps=[f"a = [[{a1}]]", f"b = [[{b1}]]", f"a + b = [[{a1 + b1}]]"])
-for m in (2, 3):  # 해가 문자
-    # 2x + y = 7 이고 해가 (m, b)  ->  b ; 다른 식 ax - y = 1 -> a
-    bval = F(7 - 2 * m)
-    aval = F(1 + bval, m)
-    add(U, "연립방정식의 해가 문자", "어려움",
-        f"연립방정식 $\\begin{{cases}} 2x + y = 7 \\\\ ax - y = 1 \\end{{cases}}$의 해가 $x = {m}$, $y = b$일 때, 수 $a$, $b$에 대하여 $ab$의 값을 구하시오.",
-        fpl(aval * bval), hint="문자가 없는 식에 먼저 대입해서 b를 구해요.",
-        explanation=f"{2 * m} + b = 7 → b = {fpl(bval)}, {m}a - {fpl(bval)} = 1 → a = {fpl(aval)}",
-        steps=[f"b = [[{fpl(bval)}]]", f"a = [[{fpl(aval)}]]", f"ab = [[{fpl(aval * bval)}]]"])
-
-def sys_add(level, concept, txt, sx, sy, hint, exp):
-    add(U, concept, level, f"{'방정식' if concept.startswith('A = B') else '연립방정식'} ${txt}$를 푸시오. (예: x=1, y=2)", f"x={sx}, y={sy}", hint=hint, explanation=exp,
-        steps=[f"x = [[{sx}]]", f"y = [[{sy}]]"])
+        c1, c2 = a1 * sx + b1 * sy, a2 * sx + b2 * sy + R.choice([0, 0, 1, -1, 2])
+        sys_.append((f"$\\begin{{cases}} {eq_tex(a1, b1, c1)} \\\\ {eq_tex(a2, b2, c2)} \\end{{cases}}$", a2 * sx + b2 * sy == c2))
+    ch, ans = pick(sys_, True)
+    return P("보통", f"다음 연립방정식 중 $x = {sx}$, $y = {sy}$가 해인 것은?", ans, choices=ch,
+             hint="두 식 모두에 대입해서 둘 다 성립해야 해요.", explanation="두 방정식을 동시에 만족시키는 것을 찾아요.",
+             steps=["두 식 [[모두]] 성립해야 해"])
 
 
-for sx, sy in [(2, -3), (-1, 4)]:  # 대입법
-    # y = 2x + k, 3x + 2y = c
-    k = sy - 2 * sx
-    c = 3 * sx + 2 * sy
-    sys_add("보통", "연립방정식의 풀이 (대입법)", f"\\begin{{cases}} y = {fx(2, k)} \\\\ 3x + 2y = {c} \\end{{cases}}", sx, sy,
-            "위의 식을 아래 식의 y에 그대로 넣어요.", f"3x + 2({fx(2, k).replace('$', '')}) = {c} → x = {sx}, y = {sy}")
-for sx, sy, (a1, b1, a2, b2) in [(3, 1, (2, 3, 3, -2)), (-2, 5, (4, 1, 3, 2)), (1, -2, (5, -3, 2, 4))]:  # 가감법
-    sys_add("보통", "연립방정식의 풀이 (가감법)",
-            f"\\begin{{cases}} {lin(a1, b1)} = {a1 * sx + b1 * sy} \\\\ {lin(a2, b2)} = {a2 * sx + b2 * sy} \\end{{cases}}", sx, sy,
-            "없앨 문자의 계수의 절댓값을 같게 만든 뒤 더하거나 빼요.", f"가감법으로 풀면 x = {sx}, y = {sy}")
-for sx, sy in [(4, -2), (6, 3)]:  # 소수·분수 계수
-    if sy < 0:
-        v1 = F(3 * sx + 2 * sy, 10)
-        txt = f"\\begin{{cases}} 0.3x + 0.2y = {float(v1):g} \\\\ \\frac{{x}}{{2}} - \\frac{{y}}{{4}} = {ftex(F(sx, 2) - F(sy, 4))} \\end{{cases}}"
+@kind(U, "연립방정식의 계수가 문자인 경우", 12)
+def _():
+    sx, sy = nz(-4, 4), nz(-4, 4)
+    av, bv = nz(-5, 5), nz(-5, 5)
+    k1, k2 = nz(-4, 4), nz(-4, 4)
+    c1, c2 = av * sx + k1 * sy, bv * sx + k2 * sy
+    combo = R.choice([("a + b", av + bv), ("a - b", av - bv), ("ab", av * bv)])
+    return P("보통", f"연립방정식 $\\begin{{cases}} ax {sgn(k1)}y = {c1} \\\\ bx {sgn(k2)}y = {c2} \\end{{cases}}$의 해가 $x = {sx}$, $y = {sy}$일 때, 수 $a$, $b$에 대하여 ${combo[0]}$의 값을 구하시오.".replace("+ 1y", "+ y").replace("- 1y", "- y"),
+             combo[1], hint="해를 두 식에 각각 대입하면 a, b에 대한 일차방정식이 돼요.",
+             explanation=f"{sx}a + ({k1 * sy}) = {c1} → a = {av}, {sx}b + ({k2 * sy}) = {c2} → b = {bv}",
+             steps=[f"a = [[{av}]]", f"b = [[{bv}]]", f"{combo[0]} = [[{combo[1]}]]"])
+
+
+@kind(U, "연립방정식의 해가 문자인 경우", 12)
+def _():
+    p_, q_ = nz(-3, 3), nz(-3, 3)
+    m, bv = nz(-4, 4), nz(-5, 5)
+    c1 = p_ * m + q_ * bv
+    r_ = nz(-3, 3)
+    c2 = R.randint(-9, 9)
+    aval = F(c2 - r_ * bv, m)
+    need(aval.denominator == 1)
+    return P("어려움", f"연립방정식 $\\begin{{cases}} {eq_tex(p_, q_, c1)} \\\\ ax {sgn(r_)}y = {c2} \\end{{cases}}$의 해가 $x = {m}$, $y = b$일 때, 수 $a$, $b$에 대하여 $a + b$의 값을 구하시오.".replace("+ 1y", "+ y").replace("- 1y", "- y"),
+             fpl(aval + bv), hint="a가 없는 식에 먼저 대입해서 b를 구해요.",
+             explanation=f"{p_}×({m}) + ({q_})b = {c1} → b = {bv}, ({m})a + ({r_})×({bv}) = {c2} → a = {fpl(aval)}",
+             steps=[f"b = [[{bv}]]", f"a = [[{fpl(aval)}]]", f"a + b = [[{fpl(aval + bv)}]]"])
+
+
+def sys_q(level, concept, txt, sx, sy, hint, exp, word="연립방정식"):
+    return P(level, f"{word} ${txt}$를 푸시오. (예: x=1, y=2)", f"x={sx}, y={sy}", hint=hint, explanation=exp,
+             steps=[f"x = [[{sx}]]", f"y = [[{sy}]]"])
+
+
+@kind(U, "연립방정식의 풀이: 대입법", 12)
+def _():
+    sx, sy = nz(-5, 5), nz(-5, 5)
+    m = nz(-4, 4)
+    k = sy - m * sx
+    a2, b2 = nz(-5, 5), nz(-5, 5)
+    need(a2 + b2 * m != 0)
+    c = a2 * sx + b2 * sy
+    if R.random() < 0.5:
+        txt = f"\\begin{{cases}} y = {fx(m, k)} \\\\ {eq_tex(a2, b2, c)} \\end{{cases}}"
     else:
-        v1 = F(sx, 3) + F(sy, 2)
-        txt = f"\\begin{{cases}} \\frac{{x}}{{3}} + \\frac{{y}}{{2}} = {ftex(v1)} \\\\ 0.1x - 0.4y = {float(F(sx, 10) - F(4 * sy, 10)):g} \\end{{cases}}"
-    sys_add("어려움", "계수가 소수 또는 분수인 연립방정식", txt, sx, sy,
-            "소수는 10, 100을, 분수는 분모의 최소공배수를 곱해 정수 계수로 바꿔요.", f"정수 계수로 바꿔 풀면 x = {sx}, y = {sy}")
-sx, sy = 2, -1  # A = B = C 꼴
-v = 2 * sx + sy + 3
-assert v == 3 * sx - 2 * sy - 2 == 6
-sys_add("어려움", "A = B = C 꼴의 방정식", f"2x + y + 3 = 3x - 2y - 2 = 6", sx, sy,
-        "A = C, B = C 두 식을 연립해요.", "2x + y + 3 = 6, 3x - 2y - 2 = 6 을 풀면 x = 2, y = -1")
-sx, sy = 3, -2  # 두 연립방정식의 해가 같을 때
-# {x + y = 1, ax - y = 8} 과 {2x - y = 8, x + by = 7}
-assert sx + sy == 1 and 2 * sx - sy == 8
-aval = F(8 + sy, sx); bval = F(7 - sx, sy)
-add(U, "두 연립방정식의 해가 같은 경우", "어려움",
-    "두 연립방정식 $\\begin{cases} x + y = 1 \\\\ ax - y = 8 \\end{cases}$, $\\begin{cases} 2x - y = 8 \\\\ x + by = 7 \\end{cases}$의 해가 서로 같을 때, 수 $a$, $b$에 대하여 $a - b$의 값을 구하시오.",
-    fpl(aval - bval), hint="문자가 없는 두 식 x + y = 1, 2x - y = 8 을 먼저 연립해요.",
-    explanation=f"x = {sx}, y = {sy} → a = {fpl(aval)}, b = {fpl(bval)}",
-    steps=[f"x = [[{sx}]], y = [[{sy}]]", f"a = [[{fpl(aval)}]]", f"b = [[{fpl(bval)}]]", f"a - b = [[{fpl(aval - bval)}]]"])
+        # x = my + k 꼴
+        k2 = sx - m * sy
+        need(b2 + a2 * m != 0)
+        txt = f"\\begin{{cases}} x = {fx(m, k2, 'y')} \\\\ {eq_tex(a2, b2, c)} \\end{{cases}}"
+    return sys_q("보통", "", txt, sx, sy, "한 식을 다른 식의 문자 자리에 그대로 넣어요.", f"대입해서 풀면 x = {sx}, y = {sy}")
 
-# 연립방정식의 활용
-s_ = [(i, 36 - i) for i in range(1, 36) if 36 - i == 3 * i + 4][0]
-add(U, "활용: 수", "보통", "합이 36인 두 자연수가 있다. 큰 수는 작은 수의 3배보다 4만큼 클 때, 큰 수를 구하시오.", s_[1],
-    hint="작은 수 x, 큰 수 y로 놓고 두 식을 세워요.", explanation="x + y = 36, y = 3x + 4 → x = 8, y = 28",
-    steps=["x + y = 36, y = 3x + [[4]]", "x = [[8]]", "큰 수 = [[28]]"])
-two = [10 * t_ + u for t_ in range(1, 10) for u in range(10) if t_ + u == 11 and 10 * u + t_ == 10 * t_ + u + 27][0]
-add(U, "활용: 자리 숫자", "어려움",
-    "각 자리 숫자의 합이 11인 두 자리 자연수가 있다. 십의 자리 숫자와 일의 자리 숫자를 바꾼 수는 처음 수보다 27만큼 클 때, 처음 수를 구하시오.", two,
-    hint="십의 자리 x, 일의 자리 y이면 처음 수는 10x + y예요.",
-    explanation="x + y = 11, 10y + x = 10x + y + 27 → x = 4, y = 7 → 47",
-    steps=["x + y = [[11]]", "y - x = [[3]]", f"처음 수: [[{two}]]"])
-qs = [(i, 25 - i) for i in range(26) if 3 * i + 5 * (25 - i) == 95][0]
-add(U, "활용: 개수와 점수", "보통", "어느 시험에서 3점짜리와 5점짜리 문제를 합하여 25개를 모두 맞혀 95점을 받았다. 5점짜리 문제는 몇 개인지 구하시오.", qs[1],
-    hint="3점짜리 x개, 5점짜리 y개로 놓아요.", explanation="x + y = 25, 3x + 5y = 95 → x = 15, y = 10",
-    steps=["x + y = 25", "3x + 5y = [[95]]", "5점짜리: [[10]]개"])
-ag = [(m, c) for m in range(1, 100) for c in range(1, 100) if m == 4 * c and m + 8 == 2 * (c + 8) + 4][0]
-add(U, "활용: 나이", "보통", "현재 삼촌의 나이는 조카의 나이의 4배이고, 8년 후에는 삼촌의 나이가 조카의 나이의 2배보다 4살 많아진다. 현재 조카의 나이를 구하시오.", ag[1],
-    hint="현재 삼촌 x살, 조카 y살. 8년 후에는 둘 다 8살씩 많아져요.", explanation=f"x = 4y, x + 8 = 2(y + 8) + 4 → y = {ag[1]}, x = {ag[0]}",
-    steps=["x = 4y", "x + 8 = 2(y + 8) + [[4]]", f"조카: [[{ag[1]}]]살"])
-rc = [(w, h) for w in range(1, 60) for h in range(1, 60) if 2 * (w + h) == 46 and w == 2 * h - 1][0]
-add(U, "활용: 도형", "보통", "둘레의 길이가 46 cm인 직사각형이 있다. 가로의 길이가 세로의 길이의 2배보다 1 cm 짧을 때, 이 직사각형의 넓이를 구하시오.", rc[0] * rc[1],
-    hint="가로 x, 세로 y로 놓고 둘레와 길이 관계로 두 식을 세워요.", explanation=f"2(x + y) = 46, x = 2y - 1 → x = {rc[0]}, y = {rc[1]} → 넓이 {rc[0] * rc[1]}",
-    steps=["x + y = [[23]]", "x = 2y - 1", f"세로 = [[{rc[1]}]]", f"넓이 = [[{rc[0] * rc[1]}]]"])
-up = [u for u in range(1, 20) if F(u, 3) + F(u + 1, 4) == 2][0]
-add(U, "활용: 거리, 속력, 시간", "어려움",
-    "도서관에 갈 때는 시속 3 km로 걷고, 올 때는 갈 때보다 1 km 더 먼 길을 시속 4 km로 걸었더니 모두 2시간이 걸렸다. 갈 때 걸은 거리는 몇 km인지 구하시오.",
-    up, hint="갈 때 x km, 올 때 y km. 시간 = 거리 ÷ 속력",
-    explanation=f"y = x + 1, x/3 + y/4 = 2 → x = {up}",
-    steps=["y = x + [[1]]", "x/3 + y/4 = [[2]]", f"갈 때 거리: [[{up}]] km"])
-gw = [(w, l) for w in range(0, 21) for l in range(0, 21) if w + l == 15 and 2 * w - l == 12][0]  # 계단 (비기는 경우 없음)
-add(U, "활용: 계단 오르기", "어려움",
-    "동전 던지기 놀이에서 앞면이 나오면 2계단 올라가고, 뒷면이 나오면 1계단 내려가기로 했다. 동전을 15번 던진 뒤 처음 위치보다 12계단 위에 있었다. 앞면은 몇 번 나왔는지 구하시오.", gw[0],
-    hint="앞면 x번, 뒷면 y번으로 놓아요.", explanation=f"x + y = 15, 2x - y = 12 → x = {gw[0]}, y = {gw[1]}",
-    steps=["x + y = [[15]]", "2x - y = [[12]]", f"앞면: [[{gw[0]}]]번"])
+
+@kind(U, "연립방정식의 풀이: 가감법", 14)
+def _():
+    sx, sy = nz(-6, 6), nz(-6, 6)
+    a1, b1, a2, b2 = nz(-5, 5), nz(-5, 5), nz(-5, 5), nz(-5, 5)
+    need(a1 * b2 - a2 * b1 != 0 and abs(a1) + abs(b1) > 2)
+    txt = f"\\begin{{cases}} {eq_tex(a1, b1, a1 * sx + b1 * sy)} \\\\ {eq_tex(a2, b2, a2 * sx + b2 * sy)} \\end{{cases}}"
+    return sys_q("보통", "", txt, sx, sy, "없앨 문자의 계수의 절댓값을 같게 만든 뒤 더하거나 빼요.", f"가감법으로 풀면 x = {sx}, y = {sy}")
+
+
+@kind(U, "괄호가 있는 연립방정식", 10)
+def _():
+    sx, sy = nz(-5, 5), nz(-5, 5)
+    p_, q_, r_ = nz(-3, 3, (0, 1)), nz(-4, 4), nz(-3, 3)
+    # p(x + q) + r y = c1  ,  a2 x + b2 y = c2
+    c1 = p_ * (sx + q_) + r_ * sy
+    a2, b2 = nz(-4, 4), nz(-4, 4)
+    need(p_ * b2 - a2 * r_ != 0)
+    txt = f"\\begin{{cases}} {'-' if p_ == -1 else p_}({lin(1, 0, q_)}) {sgn(r_)}y = {c1} \\\\ {eq_tex(a2, b2, a2 * sx + b2 * sy)} \\end{{cases}}".replace("+ 1y", "+ y").replace("- 1y", "- y")
+    return sys_q("보통", "", txt, sx, sy, "괄호를 먼저 풀어서 ax + by = c 꼴로 정리해요.", f"정리해서 풀면 x = {sx}, y = {sy}")
+
+
+@kind(U, "계수가 소수 또는 분수인 연립방정식", 14)
+def _():
+    sx, sy = nz(-6, 6), nz(-6, 6)
+    a1, b1 = nz(-5, 5), nz(-5, 5)
+    v1 = F(a1 * sx + b1 * sy, 10)
+    m, n = R.choice([(2, 3), (3, 4), (2, 5), (4, 3), (3, 2), (6, 4)])
+    s_ = R.choice([1, -1])
+    v2 = F(sx, m) + s_ * F(sy, n)
+    need(a1 * s_ * m - b1 * n != 0 or True)
+    need(F(a1, 10) * F(s_, n) - F(b1, 10) * F(1, m) != 0)
+    dec = f"{a1 / 10:g}x {('+ ' + format(b1 / 10, 'g')) if b1 > 0 else ('- ' + format(-b1 / 10, 'g'))}y = {float(v1):g}"
+    frac = f"\\frac{{x}}{{{m}}} {'+' if s_ > 0 else '-'} \\frac{{y}}{{{n}}} = {ftex(v2)}"
+    txt = f"\\begin{{cases}} {dec} \\\\ {frac} \\end{{cases}}" if R.random() < 0.5 else f"\\begin{{cases}} {frac} \\\\ {dec} \\end{{cases}}"
+    return sys_q("어려움", "", txt, sx, sy, "소수는 10을, 분수는 분모의 최소공배수를 곱해 정수 계수로 바꿔요.", f"정수 계수로 바꿔 풀면 x = {sx}, y = {sy}")
+
+
+@kind(U, "A = B = C 꼴의 방정식", 10)
+def _():
+    sx, sy = nz(-5, 5), nz(-5, 5)
+    a1, b1, a2, b2 = nz(-4, 4), nz(-4, 4), nz(-4, 4), nz(-4, 4)
+    need(a1 * b2 - a2 * b1 != 0)
+    Cv = R.randint(-9, 9)
+    k1, k2 = Cv - (a1 * sx + b1 * sy), Cv - (a2 * sx + b2 * sy)
+    txt = f"{lin(a1, b1, k1)} = {lin(a2, b2, k2)} = {Cv}"
+    return sys_q("어려움", "", txt, sx, sy, "A = C, B = C 두 식으로 나누어 연립해요.", f"{lin(a1, b1, k1, tex=False)} = {Cv}, {lin(a2, b2, k2, tex=False)} = {Cv} → x = {sx}, y = {sy}", word="방정식")
+
+
+@kind(U, "두 연립방정식의 해가 서로 같은 경우", 12)
+def _():
+    sx, sy = nz(-5, 5), nz(-5, 5)
+    p1, q1, p2, q2 = nz(-3, 3), nz(-3, 3), nz(-3, 3), nz(-3, 3)
+    need(p1 * q2 - p2 * q1 != 0)
+    av, bv = nz(-5, 5), nz(-5, 5)
+    r1, r2 = nz(-3, 3), nz(-3, 3)
+    e1, e2 = eq_tex(p1, q1, p1 * sx + q1 * sy), eq_tex(p2, q2, p2 * sx + q2 * sy)
+    f1 = f"ax {sgn(r1)}y = {av * sx + r1 * sy}".replace("+ 1y", "+ y").replace("- 1y", "- y")
+    f2 = f"{lin(r2, 0, 0)} + by = {r2 * sx + bv * sy}"
+    combo = R.choice([("a + b", av + bv), ("a - b", av - bv), ("ab", av * bv)])
+    return P("어려움", f"두 연립방정식 $\\begin{{cases}} {e1} \\\\ {f1} \\end{{cases}}$, $\\begin{{cases}} {e2} \\\\ {f2} \\end{{cases}}$의 해가 서로 같을 때, 수 $a$, $b$에 대하여 ${combo[0]}$의 값을 구하시오.",
+             combo[1], hint="문자 a, b가 없는 두 식끼리 먼저 연립해서 해를 구해요.",
+             explanation=f"{lin(p1, q1, tex=False)} = {p1 * sx + q1 * sy}, {lin(p2, q2, tex=False)} = {p2 * sx + q2 * sy} → x = {sx}, y = {sy} → a = {av}, b = {bv}",
+             steps=[f"x = [[{sx}]], y = [[{sy}]]", f"a = [[{av}]]", f"b = [[{bv}]]", f"{combo[0]} = [[{combo[1]}]]"])
+
+
+def word_sys(level, q, ans_, hint, ex, steps):
+    return P(level, q, ans_, hint=hint, explanation=ex, steps=steps)
+
+
+@kind(U, "연립방정식의 활용: 수", 14)
+def _():
+    if R.random() < 0.5:
+        s_ = R.randint(20, 90)
+        k, d = R.randint(2, 5), R.randint(-6, 8)
+        sm = [(i, s_ - i) for i in range(1, s_) if s_ - i == k * i + d and s_ - i > i]
+        need(sm)
+        sml, bg = sm[0]
+        return word_sys("보통", f"합이 {s_}인 두 자연수가 있다. 큰 수는 작은 수의 {k}배보다 {abs(d)}만큼 {'크다' if d >= 0 else '작다'}. 큰 수를 구하시오.", bg,
+                        "작은 수 x, 큰 수 y로 놓고 두 식을 세워요.", f"x + y = {s_}, y = {k}x {sgn(d)} → x = {sml}, y = {bg}",
+                        [f"x + y = [[{s_}]]", f"작은 수: [[{sml}]]", f"큰 수: [[{bg}]]"])
+    t_, u = R.randint(1, 9), R.randint(1, 9)
+    need(t_ != u)
+    diff = 9 * (u - t_)
+    word = "크다" if diff > 0 else "작다"
+    return word_sys("어려움", f"각 자리 숫자의 합이 {t_ + u}인 두 자리 자연수가 있다. 십의 자리 숫자와 일의 자리 숫자를 바꾼 수는 처음 수보다 {abs(diff)}만큼 {word}. 처음 수를 구하시오.",
+                    10 * t_ + u, "십의 자리 x, 일의 자리 y이면 처음 수는 10x + y, 바꾼 수는 10y + x예요.",
+                    f"x + y = {t_ + u}, (10y + x) - (10x + y) = {diff} → x = {t_}, y = {u}",
+                    [f"x + y = [[{t_ + u}]]", f"y - x = [[{u - t_}]]", f"처음 수: [[{10 * t_ + u}]]"])
+
+
+@kind(U, "연립방정식의 활용: 개수와 가격", 14)
+def _():
+    if R.random() < 0.5:
+        p1, p2 = R.choice([(2, 3), (3, 4), (3, 5), (4, 6), (2, 5)])
+        n1, n2 = R.randint(3, 20), R.randint(3, 20)
+        tot, sc = n1 + n2, p1 * n1 + p2 * n2
+        return word_sys("보통", f"어느 시험에서 {p1}점짜리와 {p2}점짜리 문제를 합하여 {tot}개를 모두 맞혀 {sc}점을 받았다. {p2}점짜리 문제는 몇 개인지 구하시오.", n2,
+                        f"{p1}점짜리 x개, {p2}점짜리 y개로 놓아요.", f"x + y = {tot}, {p1}x + {p2}y = {sc} → x = {n1}, y = {n2}",
+                        [f"x + y = [[{tot}]]", f"{p1}x + {p2}y = [[{sc}]]", f"{p2}점짜리: [[{n2}]]개"])
+    p1, p2 = R.choice([(3000, 2000), (5000, 3000), (4000, 2500), (6000, 3500), (2000, 1200)])
+    n1, n2 = R.randint(2, 15), R.randint(2, 15)
+    tot, money = n1 + n2, p1 * n1 + p2 * n2
+    who = R.choice([("어른", "청소년"), ("어른", "어린이")])
+    return word_sys("보통", f"어느 미술관의 입장료는 {who[0]} {p1}원, {who[1]} {p2}원이다. {who[0]}과 {who[1]}을 합하여 {tot}명이 입장하고 {money}원을 냈을 때, {who[1]}은 몇 명인지 구하시오.", n2,
+                    f"{who[0]} x명, {who[1]} y명으로 놓아요.", f"x + y = {tot}, {p1}x + {p2}y = {money} → x = {n1}, y = {n2}",
+                    [f"x + y = [[{tot}]]", f"{who[1]}: [[{n2}]]명"])
+
+
+@kind(U, "연립방정식의 활용: 나이", 12)
+def _():
+    child = R.randint(4, 15)
+    k = R.randint(2, 4)
+    d = R.randint(0, 8)
+    adult = k * child + d
+    yrs = R.randint(3, 12)
+    m = R.randint(2, 3)
+    extra = (adult + yrs) - m * (child + yrs)
+    need(extra >= 0 and m < k)
+    who = R.choice(["이모", "삼촌", "아버지", "어머니", "고모"])
+    first = f"조카의 나이의 {k}배" + (f"보다 {d}살 많고" if d else "이고")
+    return word_sys("보통", f"현재 {who}의 나이는 {first}, {yrs}년 후에는 {who}의 나이가 조카의 나이의 {m}배{'보다 ' + str(extra) + '살 많아진다' if extra else '가 된다'}. 현재 조카의 나이를 구하시오.",
+                    child, f"현재 {who} x살, 조카 y살. {yrs}년 후에는 둘 다 {yrs}살씩 많아져요.",
+                    f"x = {k}y {sgn(d)}, x + {yrs} = {m}(y + {yrs}) {sgn(extra)} → y = {child}, x = {adult}",
+                    [f"x = {k}y {sgn(d)}", f"조카: [[{child}]]살"])
+
+
+@kind(U, "연립방정식의 활용: 도형", 12)
+def _():
+    if R.random() < 0.6:
+        h = R.randint(3, 20)
+        k, d = R.randint(2, 3), R.randint(-5, 6)
+        w = k * h + d
+        need(w > 0 and w != h)
+        P_ = 2 * (w + h)
+        rel = f"세로의 길이의 {k}배보다 {abs(d)} cm {'길' if d > 0 else '짧'}" if d else f"세로의 길이의 {k}배"
+        return word_sys("보통", f"둘레의 길이가 {P_} cm인 직사각형이 있다. 가로의 길이가 {rel}{'을' if d else '일'} 때, 이 직사각형의 넓이를 구하시오.".replace("배일 때", "배일 때").replace("길을 때", "길 때").replace("짧을 때", "짧을 때"),
+                        w * h, "가로 x cm, 세로 y cm로 놓고 둘레와 길이 관계로 두 식을 세워요.",
+                        f"2(x + y) = {P_}, x = {k}y {sgn(d)} → x = {w}, y = {h} → 넓이 {w * h}",
+                        [f"x + y = [[{P_ // 2}]]", f"세로 = [[{h}]]", f"넓이 = [[{w * h}]] cm²"])
+    bt = R.randint(6, 16)
+    d = R.randint(1, bt - 2)
+    tp = bt - d
+    hgt = R.randint(2, 10)
+    S = (tp + bt) * hgt
+    need(S % 2 == 0)
+    S //= 2
+    return word_sys("보통", f"윗변의 길이가 아랫변의 길이보다 {d} cm 짧고 높이가 {hgt} cm인 사다리꼴의 넓이가 {S} cm²일 때, 아랫변의 길이를 구하시오.", bt,
+                    "윗변 x cm, 아랫변 y cm로 놓아요. 사다리꼴의 넓이 = (윗변 + 아랫변) × 높이 ÷ 2",
+                    f"x = y - {d}, (x + y) × {hgt} ÷ 2 = {S} → y = {bt}", [f"x + y = [[{tp + bt}]]", f"아랫변: [[{bt}]] cm"])
+
+
+@kind(U, "연립방정식의 활용: 거리, 속력, 시간", 12)
+def _():
+    v1, v2 = R.choice([(2, 3), (3, 4), (2, 4), (3, 5), (4, 6), (3, 6)])
+    d1 = R.randint(2, 9)
+    extra = R.randint(1, 3)
+    d2 = d1 + extra
+    tt = F(d1, v1) + F(d2, v2)
+    need(tt.denominator in (1, 2, 4, 3))
+    h, mi = int(tt), int((tt - int(tt)) * 60)
+    tstr = f"{h}시간" + (f" {mi}분" if mi else "")
+    place = R.choice(["도서관", "할머니 댁", "공원", "산 정상"])
+    return word_sys("어려움", f"{place}에 갈 때는 시속 {v1} km로 걷고, 올 때는 갈 때보다 {extra} km 더 먼 길을 시속 {v2} km로 걸었더니 모두 {tstr}이 걸렸다. 갈 때 걸은 거리는 몇 km인지 구하시오.",
+                    d1, "갈 때 x km, 올 때 y km. 시간 = 거리 ÷ 속력",
+                    f"y = x + {extra}, x/{v1} + y/{v2} = {fpl(tt)} → x = {d1}", [f"y = x + [[{extra}]]", f"x/{v1} + y/{v2} = [[{fpl(tt)}]]", f"갈 때 거리: [[{d1}]] km"])
+
+
+@kind(U, "연립방정식의 활용: 계단 오르기", 10)
+def _():
+    up, down = R.choice([(2, 1), (3, 1), (3, 2), (4, 1)])
+    w, l = R.randint(3, 15), R.randint(2, 12)
+    pos = up * w - down * l
+    need(pos > 0)
+    game = R.choice(["동전을 던져 앞면이 나오면", "주사위를 던져 짝수가 나오면"])
+    other = "뒷면이 나오면" if "동전" in game else "홀수가 나오면"
+    return word_sys("어려움", f"{game} {up}계단 올라가고, {other} {down}계단 내려가기로 했다. {w + l}번 던진 뒤 처음 위치보다 {pos}계단 위에 있었다. {game.split('나오면')[0].split('던져 ')[1]}는 몇 번 나왔는지 구하시오.".replace("앞면이 는", "앞면은").replace("짝수가 는", "짝수는"),
+                    w, "올라간 횟수 x, 내려간 횟수 y로 놓아요.", f"x + y = {w + l}, {lin(up, -down, tex=False)} = {pos} → x = {w}, y = {l}",
+                    [f"x + y = [[{w + l}]]", f"{lin(up, -down, tex=False)} = [[{pos}]]", f"답: [[{w}]]번"])
+
 
 # ═════════════════════ 6. 일차함수와 그 그래프 ═════════════════════
 U = "6. 일차함수와 그 그래프"
-st = [("자연수 $x$보다 작은 짝수 $y$", False), ("자연수 $x$의 약수 $y$", False), ("자연수 $x$를 3으로 나눈 나머지 $y$", True),
-      ("한 변의 길이가 $x$ cm인 정사각형의 둘레 $y$ cm", True), ("절댓값이 $x$인 수 $y$", False), ("$x$보다 큰 자연수 $y$", False)]
-ch, ans = pick([s for s in st if s[1]][:1] + [s for s in st if not s[1]][:4], True)
-add(U, "함수의 뜻", "보통", "다음 중 $y$가 $x$의 함수인 것은?", ans, choices=ch,
-    hint="x 하나에 y가 꼭 하나씩만 정해지면 함수예요. 두 개 이상 나오거나 없으면 함수가 아니에요.",
-    explanation="x의 값 하나에 y의 값이 오직 하나씩 대응하는지 x = 4 같은 수를 넣어 확인해요.",
-    steps=["x 하나에 y가 [[하나]]씩 대응하면 함수"])
-for k_, x1, x2 in [(-12, 3, -4), (18, 2, -6)]:  # 함숫값 f(x) = k/x
-    v = F(k_, x1) + F(k_, x2)
-    ftx = f"\\frac{{{k_}}}{{x}}" if k_ > 0 else f"-\\frac{{{-k_}}}{{x}}"
-    add(U, "함숫값", "쉬움", f"함수 $f(x) = {ftx}$에 대하여 $f({x1}) + f({x2})$의 값을 구하시오.",
-        fpl(v), hint="x 자리에 수를 넣어요.", explanation=f"f({x1}) = {fpl(F(k_, x1))}, f({x2}) = {fpl(F(k_, x2))} → 합 {fpl(v)}",
-        steps=[f"f({x1}) = [[{fpl(F(k_, x1))}]]", f"f({x2}) = [[{fpl(F(k_, x2))}]]", f"합: [[{fpl(v)}]]"])
-add(U, "함숫값으로 미지수 구하기", "보통", "함수 $f(x) = \\frac{a}{x}$에 대하여 $f(-4) = 6$일 때, $f(3)$의 값을 구하시오.", fpl(F(-24, 3)),
-    hint="먼저 f(-4) = 6 에서 a를 구해요.", explanation="a/(-4) = 6 → a = -24, f(3) = -24/3 = -8",
-    steps=["a = [[-24]]", "f(3) = [[-8]]"])
-st = [("$y = 3x - 1$", True), ("$y = \\frac{2}{x}$", False), ("$y = x^{2} + 1$", False), ("$y = 5$", False), ("$y = x(x - 2) - x^{2}$", True), ("$y = 2(x + 1) - 2x$", False)]
-ch, ans = pick([st[4]] + [s for s in st if not s[1]][:4], True)
-add(U, "일차함수의 뜻", "보통", "다음 중 $y$가 $x$에 대한 일차함수인 것은?", ans, choices=ch,
-    hint="정리해서 y = ax + b (a ≠ 0) 꼴이면 일차함수예요. 괄호는 먼저 풀어 봐요.",
-    explanation="x(x - 2) - x² = -2x 이므로 y = -2x 로 일차함수예요.",
-    steps=["정리해서 y = ax + b, [[a ≠ 0]]"])
-for m, c, target in [(3, -4, 11), (-2, 7, 15)]:  # 일차함수 함숫값으로 a 구하기
-    av = F(target - c, m)
-    add(U, "일차함수의 함숫값", "쉬움", f"일차함수 $f(x) = {fx(m, c)}$에 대하여 $f(a) = {target}$일 때, $a$의 값을 구하시오.", fpl(av),
-        hint="x 자리에 a를 넣고 방정식을 풀어요.", explanation=f"{m}a {'+' if c >= 0 else '-'} {abs(c)} = {target} → a = {fpl(av)}",
-        steps=[f"{m}a = [[{target - c}]]", f"a = [[{fpl(av)}]]"])
-m0 = 3  # 평행이동
-right = f"$y = {fx(m0, -4)}$"
-ch, ans = mc(right, [f"$y = {fx(-m0, -4)}$", f"$y = {fx(m0, 4)}$", f"$y = {fx(-4, m0)}$", f"$y = {fx(m0 - 4, 0)}$"])
-add(U, "일차함수의 그래프의 평행이동", "쉬움", f"일차함수 $y = {fx(m0, 0)}$의 그래프를 $y$축의 방향으로 $-4$만큼 평행이동한 그래프의 식은?", ans, choices=ch,
-    hint="y축 방향으로 b만큼 평행이동하면 y = ax + b", explanation="y = 3x 에 -4 → y = 3x - 4",
-    steps=["더하는 수: [[-4]]"])
-for m, c, sh, px in [(5, -2, 4, 1), (-3, 1, -2, -2)]:  # 평행이동한 그래프 위의 점
-    yy = m * px + c + sh
-    add(U, "평행이동한 그래프 위의 점", "보통",
-        f"일차함수 $y = {fx(m, c)}$의 그래프를 $y$축의 방향으로 ${sh}$만큼 평행이동한 그래프가 점 $({px}, k)$를 지날 때, $k$의 값을 구하시오.", yy,
-        hint="먼저 평행이동한 식을 구한 뒤 x에 대입해요.", explanation=f"y = {fx(m, c + sh)}, x = {px} → k = {yy}",
-        steps=[f"평행이동한 식: y = {fx(m, c + sh)}", f"k = [[{yy}]]"])
-for m, c in [(F(2, 3), -4), (-3, 6)]:  # x절편, y절편
-    xi = F(-c) / m
-    add(U, "x절편과 y절편", "쉬움", f"일차함수 $y = {fx(m, c)}$의 그래프의 $x$절편을 $p$, $y$절편을 $q$라 할 때, $p + q$의 값을 구하시오.", fpl(xi + c),
-        hint="x절편: y = 0일 때 x의 값, y절편: x = 0일 때 y의 값", explanation=f"p = {fpl(xi)}, q = {c} → p + q = {fpl(xi + c)}",
-        steps=[f"x절편 p = [[{fpl(xi)}]]", f"y절편 q = [[{c}]]", f"p + q = [[{fpl(xi + c)}]]"])
-kval = F(-6) / F(-1, 2)  # y = -1/2 x + k 의 x절편이 ... 다른 함수의 y절편과 같을 때
-add(U, "절편으로 미지수 구하기", "보통",
-    "일차함수 $y = -\\frac{1}{2}x + k$의 그래프의 $x$절편이 $-6$일 때, 수 $k$의 값을 구하시오.", fpl(F(-3)),
-    hint="x절편이 -6이면 점 (-6, 0)을 지나요.", explanation="0 = -1/2 × (-6) + k → k = -3",
-    steps=["0 = 3 + k", "k = [[-3]]"])
-for m in (F(3, 4), F(-5, 2)):  # 기울기 (증가량)
-    dx = 8 if m.denominator == 4 else 4
-    dy = m * dx
-    add(U, "일차함수의 그래프의 기울기", "쉬움",
-        f"일차함수 $y = {fx(m, -1)}$의 그래프에서 $x$의 값이 {dx}만큼 증가할 때, $y$의 값의 증가량을 구하시오.", fpl(dy),
-        hint="(y의 값의 증가량) = (기울기) × (x의 값의 증가량)", explanation=f"{fpl(m)} × {dx} = {fpl(dy)}",
-        steps=[f"기울기 = [[{fpl(m)}]]", f"증가량 = [[{fpl(dy)}]]"])
-for (x1, y1), (x2, y2), sl, ask in [((4, None), (-1, 9), -2, "k"), ((1, 6), (-2, None), 3, "a")]:  # 두 점과 기울기
-    if y1 is None:
-        y1v = y2 + sl * (x1 - x2)
-        q = f"두 점 $({x1}, k)$, $({x2}, {y2})$를 지나는 일차함수의 그래프의 기울기가 ${sl}$일 때, $k$의 값을 구하시오."
-        ans_ = y1v
+FUNC_FACTS = [("자연수 $x$보다 작은 짝수 $y$", False), ("자연수 $x$의 약수 $y$", False), ("자연수 $x$를 3으로 나눈 나머지 $y$", True),
+              ("한 변의 길이가 $x$ cm인 정사각형의 둘레 $y$ cm", True), ("절댓값이 $x$인 수 $y$", False), ("$x$보다 큰 자연수 $y$", False),
+              ("자연수 $x$의 약수의 개수 $y$", True), ("시속 $x$ km로 2시간 동안 간 거리 $y$ km", True), ("자연수 $x$의 배수 $y$", False),
+              ("둘레가 $x$ cm인 직사각형의 넓이 $y$ cm²", False), ("$x$살인 학생의 키 $y$ cm", False), ("1개에 500원인 사탕 $x$개의 값 $y$원", True)]
+
+
+@kind(U, "함수의 뜻", 8)
+def _():
+    want = R.random() < 0.5
+    ch, ans = pick(R.sample(FUNC_FACTS, len(FUNC_FACTS)), want)
+    return P("보통", f"다음 중 $y$가 $x$의 함수{'인' if want else '가 아닌'} 것은?", ans, choices=ch,
+             hint="x 하나에 y가 꼭 하나씩만 정해지면 함수예요. 두 개 이상 나오거나 정해지지 않으면 함수가 아니에요.",
+             explanation="x = 4 같은 수를 넣어서 y가 하나로 정해지는지 확인해요.", steps=["x 하나에 y가 [[하나]]씩 대응하면 함수"])
+
+
+@kind(U, "함숫값", 12)
+def _():
+    if R.random() < 0.5:
+        k_ = nz(-24, 24)
+        x1, x2 = nz(-6, 6), nz(-6, 6)
+        need(x1 != x2 and k_ % x1 == 0 and k_ % x2 == 0)
+        v = F(k_, x1) + F(k_, x2)
+        ftx = f"\\frac{{{k_}}}{{x}}" if k_ > 0 else f"-\\frac{{{-k_}}}{{x}}"
     else:
-        y2v = y1 + sl * (x2 - x1)
-        q = f"두 점 $({x1}, {y1})$, $({x2}, a)$를 지나는 일차함수의 그래프의 기울기가 ${sl}$일 때, $a$의 값을 구하시오."
-        ans_ = y2v
-    add(U, "두 점을 지나는 직선의 기울기", "보통", q, ans_,
-        hint="기울기 = (y의 값의 차) ÷ (x의 값의 차)", explanation=f"기울기 식을 세워 풀면 {ans_}",
-        steps=[f"답: [[{ans_}]]"])
-for m, c in [(F(-1, 3), -4), (F(2, 3), 4)]:  # 삼각형 넓이
+        k_ = F(nz(-6, 6), R.choice([1, 2, 3]))
+        x1, x2 = nz(-6, 6), nz(-6, 6)
+        need(x1 != x2)
+        v = k_ * x1 + k_ * x2
+        ftx = fx(k_, 0)
+        need(v.denominator == 1)
+    c1, c2 = R.choice([(1, 1), (1, -1), (2, 1)])
+    v = (F(k_, x1) * c1 + F(k_, x2) * c2) if "frac{" in ftx and "x}" in ftx else (k_ * x1 * c1 + k_ * x2 * c2)
+    need(F(v).denominator <= 6)
+    expr = f"{'2' if c1 == 2 else ''}f({x1}) {'+' if c2 > 0 else '-'} f({x2})"
+    return P("쉬움", f"함수 $f(x) = {ftx}$에 대하여 ${expr}$의 값을 구하시오.", fpl(v),
+             hint="x 자리에 그 수를 넣어 계산해요.", explanation=f"x = {x1}, {x2}를 차례로 넣어 계산하면 {fpl(v)}",
+             steps=[f"{expr} = [[{fpl(v)}]]"])
+
+
+@kind(U, "함숫값이 주어질 때 미지수 구하기", 12)
+def _():
+    if R.random() < 0.5:
+        av = nz(-24, 24)
+        x1, x2 = nz(-6, 6), nz(-6, 6)
+        need(av % x1 == 0 and x1 != x2)
+        v1, v2 = F(av, x1), F(av, x2)
+        need(v2.denominator <= 3)
+        return P("보통", f"함수 $f(x) = \\frac{{a}}{{x}}$에 대하여 $f({x1}) = {fpl(v1)}$일 때, $f({x2})$의 값을 구하시오.", fpl(v2),
+                 hint=f"먼저 f({x1}) = {fpl(v1)} 에서 a를 구해요.", explanation=f"a/({x1}) = {fpl(v1)} → a = {av}, f({x2}) = {av}/({x2}) = {fpl(v2)}",
+                 steps=[f"a = [[{av}]]", f"f({x2}) = [[{fpl(v2)}]]"])
+    av = nz(-6, 6)
+    x1, x2 = nz(-5, 5), nz(-5, 5)
+    need(x1 != x2)
+    return P("보통", f"함수 $f(x) = ax$에 대하여 $f({x1}) = {av * x1}$일 때, $f({x2})$의 값을 구하시오.", av * x2,
+             hint=f"먼저 f({x1}) = {av * x1} 에서 a를 구해요.", explanation=f"{x1}a = {av * x1} → a = {av}, f({x2}) = {av * x2}",
+             steps=[f"a = [[{av}]]", f"f({x2}) = [[{av * x2}]]"])
+
+
+LIN_POOL = [("$y = 3x - 1$", True), ("$y = \\frac{2}{x}$", False), ("$y = x^{2} + 1$", False), ("$y = 5$", False), ("$y = x(x - 2) - x^{2}$", True),
+            ("$y = 2(x + 1) - 2x$", False), ("$y = -\\frac{x}{4}$", True), ("$y = \\frac{1}{x} + 1$", False), ("$xy = 6$", False),
+            ("$y = 0.5x + 2$", True), ("$y - x = x + 3$", True), ("$y = x^{2} - x(x + 1)$", True), ("$y = 3 - x^{2}$", False)]
+
+
+@kind(U, "일차함수의 뜻", 8)
+def _():
+    want = R.random() < 0.6
+    ch, ans = pick(R.sample(LIN_POOL, len(LIN_POOL)), want)
+    return P("보통", f"다음 중 $y$가 $x$에 대한 일차함수{'인' if want else '가 아닌'} 것은?", ans, choices=ch,
+             hint="정리해서 y = ax + b (a ≠ 0) 꼴이면 일차함수예요. 괄호는 먼저 풀어 봐요.",
+             explanation="괄호를 풀고 y = (x에 대한 일차식) 꼴인지 확인해요. x²이 지워지면 일차함수일 수 있어요.",
+             steps=["정리해서 y = ax + b, [[a ≠ 0]]"])
+
+
+@kind(U, "일차함수의 함숫값", 12)
+def _():
+    m, c = nz(-5, 5), R.randint(-9, 9)
+    av = nz(-6, 6)
+    target = m * av + c
+    if R.random() < 0.5:
+        return P("쉬움", f"일차함수 $f(x) = {fx(m, c)}$에 대하여 $f(a) = {target}$일 때, $a$의 값을 구하시오.", av,
+                 hint="x 자리에 a를 넣고 방정식을 풀어요.", explanation=f"{m}a {sgn(c)} = {target} → a = {av}",
+                 steps=[f"{m}a = [[{target - c}]]", f"a = [[{av}]]"])
+    p_ = nz(-4, 4)
+    q_ = R.randint(-9, 9)
+    k = nz(-4, 4)
+    # f(x) = px + q 에서 f(k) = t 일 때 p
+    t_ = p_ * k + q_
+    return P("쉬움", f"일차함수 $f(x) = ax {sgn(q_)}$에 대하여 $f({k}) = {t_}$일 때, 수 $a$의 값을 구하시오.", p_,
+             hint="x 자리에 수를 넣으면 a에 대한 방정식이 돼요.", explanation=f"{k}a {sgn(q_)} = {t_} → a = {p_}",
+             steps=[f"{k}a = [[{t_ - q_}]]", f"a = [[{p_}]]"])
+
+
+@kind(U, "일차함수의 그래프의 평행이동", 12)
+def _():
+    m, c0, sh = nz(-5, 5), R.randint(-6, 6), nz(-7, 7)
+    right = f"$y = {fx(m, c0 + sh)}$"
+    wr = [f"$y = {fx(-m, c0 + sh)}$", f"$y = {fx(m, c0 - sh)}$", f"$y = {fx(m + sh, c0)}$", f"$y = {fx(m, -(c0 + sh))}$", f"$y = {fx(c0 + sh, m)}$"]
+    ch, ans = mc(right, wr)
+    return P("쉬움", f"일차함수 $y = {fx(m, c0)}$의 그래프를 $y$축의 방향으로 ${sh}$만큼 평행이동한 그래프의 식은?", ans, choices=ch,
+             hint="y축 방향으로 k만큼 평행이동하면 상수항에 k를 더해요. 기울기는 그대로예요.",
+             explanation=f"y = {fx(m, c0, tex=False)} {sgn(sh)} → y = {fx(m, c0 + sh, tex=False)}", steps=[f"상수항: {c0} + ({sh}) = [[{c0 + sh}]]"])
+
+
+@kind(U, "평행이동한 그래프 위의 점", 12)
+def _():
+    m, c, sh, px = nz(-5, 5), R.randint(-6, 6), nz(-6, 6), nz(-4, 4)
+    yy = m * px + c + sh
+    if R.random() < 0.5:
+        return P("보통", f"일차함수 $y = {fx(m, c)}$의 그래프를 $y$축의 방향으로 ${sh}$만큼 평행이동한 그래프가 점 $({px}, k)$를 지날 때, $k$의 값을 구하시오.", yy,
+                 hint="먼저 평행이동한 식을 구한 뒤 x에 대입해요.", explanation=f"y = {fx(m, c + sh, tex=False)}, x = {px} → k = {yy}",
+                 steps=[f"평행이동한 식: y = {fx(m, c + sh, tex=False)}", f"k = [[{yy}]]"])
+    return P("보통", f"일차함수 $y = {fx(m, c)}$의 그래프를 $y$축의 방향으로 $p$만큼 평행이동하였더니 점 $({px}, {yy})$를 지났다. $p$의 값을 구하시오.", sh,
+             hint="평행이동한 식 y = (기울기)x + (상수항 + p)에 점을 대입해요.", explanation=f"{yy} = {m}×({px}) {sgn(c)} + p → p = {sh}",
+             steps=[f"p = [[{sh}]]"])
+
+
+@kind(U, "x절편과 y절편", 12)
+def _():
+    m = F(nz(-6, 6), R.choice([1, 1, 2, 3, 4]))
+    c = nz(-9, 9)
+    xi = F(-c) / m
+    need(xi.denominator <= 4)
+    combo = R.choice([("p + q", xi + c), ("p - q", xi - c), ("pq", xi * c)])
+    return P("쉬움", f"일차함수 $y = {fx(m, c)}$의 그래프의 $x$절편을 $p$, $y$절편을 $q$라 할 때, ${combo[0]}$의 값을 구하시오.", fpl(combo[1]),
+             hint="x절편: y = 0일 때 x의 값, y절편: x = 0일 때 y의 값",
+             explanation=f"p = {fpl(xi)}, q = {c} → {combo[0]} = {fpl(combo[1])}",
+             steps=[f"x절편 p = [[{fpl(xi)}]]", f"y절편 q = [[{c}]]", f"{combo[0]} = [[{fpl(combo[1])}]]"])
+
+
+@kind(U, "절편을 이용하여 미지수 구하기", 12)
+def _():
+    m = F(nz(-6, 6), R.choice([1, 2, 3]))
+    xi = nz(-8, 8)
+    k = -m * xi
+    need(k.denominator == 1)
+    if R.random() < 0.5:
+        return P("보통", f"일차함수 $y = {fx(m, 0)} + k$의 그래프의 $x$절편이 ${xi}$일 때, 수 $k$의 값을 구하시오.", fpl(k),
+                 hint=f"x절편이 {xi}이면 점 ({xi}, 0)을 지나요.", explanation=f"0 = {fpl(m)} × ({xi}) + k → k = {fpl(k)}",
+                 steps=[f"0 = {fpl(m * xi)} + k", f"k = [[{fpl(k)}]]"])
+    c = nz(-9, 9)
+    m2 = F(-c, xi)
+    need(m2.denominator <= 3 and m2 != 0)
+    return P("보통", f"일차함수 $y = ax {sgn(c)}$의 그래프의 $x$절편이 ${xi}$일 때, 수 $a$의 값을 구하시오.", fpl(m2),
+             hint=f"점 ({xi}, 0)을 대입해요.", explanation=f"0 = {xi}a {sgn(c)} → a = {fpl(m2)}", steps=[f"a = [[{fpl(m2)}]]"])
+
+
+@kind(U, "일차함수의 그래프의 기울기", 12)
+def _():
+    m = F(nz(-6, 6), R.choice([1, 2, 3, 4]))
+    if R.random() < 0.5:
+        dx = R.choice([m.denominator * k for k in (1, 2, 3, 4)])
+        dy = m * dx
+        return P("쉬움", f"일차함수 $y = {fx(m, nz(-5, 5))}$의 그래프에서 $x$의 값이 {dx}만큼 증가할 때, $y$의 값의 증가량을 구하시오.", fpl(dy),
+                 hint="(y의 값의 증가량) = (기울기) × (x의 값의 증가량)", explanation=f"{fpl(m)} × {dx} = {fpl(dy)}",
+                 steps=[f"기울기 = [[{fpl(m)}]]", f"증가량 = [[{fpl(dy)}]]"])
+    x1 = R.randint(-4, 3)
+    x2 = x1 + R.randint(1, 6)
+    dy = m * (x2 - x1)
+    need(dy.denominator == 1)
+    return P("쉬움", f"일차함수 $y = {fx(m, nz(-5, 5))}$의 그래프에서 $x$의 값이 ${x1}$에서 ${x2}$까지 증가할 때, $y$의 값의 증가량을 구하시오.", fpl(dy),
+             hint="x의 값의 증가량을 먼저 구한 뒤 기울기를 곱해요.", explanation=f"x 증가량 {x2 - x1}, × {fpl(m)} = {fpl(dy)}",
+             steps=[f"x 증가량 = [[{x2 - x1}]]", f"y 증가량 = [[{fpl(dy)}]]"])
+
+
+@kind(U, "두 점을 지나는 직선의 기울기", 14)
+def _():
+    x1, x2 = nz(-6, 6), nz(-6, 6)
+    need(x1 != x2)
+    sl = F(nz(-5, 5), R.choice([1, 1, 2]))
+    y2 = R.randint(-9, 9)
+    y1 = y2 + sl * (x1 - x2)
+    need(y1.denominator == 1)
+    y1 = int(y1)
+    mode = R.random()
+    if mode < 0.4:
+        return P("보통", f"두 점 $({x1}, {y1})$, $({x2}, {y2})$를 지나는 일차함수의 그래프의 기울기를 구하시오.", fpl(sl),
+                 hint="기울기 = (y의 값의 차) ÷ (x의 값의 차)", explanation=f"({y2} - ({y1})) ÷ ({x2} - ({x1})) = {fpl(sl)}",
+                 steps=[f"y의 차: [[{y2 - y1}]]", f"x의 차: [[{x2 - x1}]]", f"기울기 = [[{fpl(sl)}]]"])
+    return P("보통", f"두 점 $({x1}, k)$, $({x2}, {y2})$를 지나는 일차함수의 그래프의 기울기가 ${ftex(sl)}$일 때, $k$의 값을 구하시오.", y1,
+             hint="기울기 = (y의 값의 차) ÷ (x의 값의 차) 로 식을 세워요.", explanation=f"({y2} - k) ÷ ({x2} - ({x1})) = {fpl(sl)} → k = {y1}",
+             steps=[f"{y2} - k = {fpl(sl)} × {x2 - x1}", f"k = [[{y1}]]"])
+
+
+@kind(U, "그래프와 좌표축으로 둘러싸인 삼각형의 넓이", 12)
+def _():
+    m = F(nz(-5, 5), R.choice([1, 2, 3, 4]))
+    c = nz(-9, 9)
     xi = F(-c) / m
     S = abs(xi) * abs(c) / 2
-    add(U, "그래프와 좌표축으로 둘러싸인 삼각형", "보통",
-        f"일차함수 $y = {fx(m, c)}$의 그래프와 $x$축 및 $y$축으로 둘러싸인 삼각형의 넓이를 구하시오.", fpl(S),
-        hint="x절편과 y절편을 구하면 직각삼각형의 두 변 길이가 나와요.", explanation=f"x절편 {fpl(xi)}, y절편 {c} → 넓이 {abs(xi)} × {abs(c)} ÷ 2 = {fpl(S)}",
-        steps=[f"x절편 = [[{fpl(xi)}]]", f"y절편 = [[{c}]]", f"넓이 = [[{fpl(S)}]]"])
-P1, P2, xk = (-3, 8), (1, 0), 4  # 세 점이 한 직선 위
-sl = F(P2[1] - P1[1], P2[0] - P1[0])
-yk = P2[1] + sl * (xk - P2[0])
-add(U, "세 점이 한 직선 위에 있을 조건", "어려움",
-    f"세 점 $({P1[0]}, {P1[1]})$, $({P2[0]}, {P2[1]})$, $({xk}, k)$가 한 직선 위에 있을 때, $k$의 값을 구하시오.", fpl(yk),
-    hint="어느 두 점을 골라도 기울기가 같아요.", explanation=f"기울기 {fpl(sl)} → k = {P2[1]} + ({fpl(sl)}) × {xk - P2[0]} = {fpl(yk)}",
-    steps=[f"기울기 = [[{fpl(sl)}]]", f"k = [[{fpl(yk)}]]"])
-m, c = F(2, 3), -4  # 그래프의 성질
-st = [("오른쪽 위로 향하는 직선이다.", True), (f"$x$절편은 6이다.", True), ("$y$절편은 $-4$이다.", True), (f"$y = \\frac{{2}}{{3}}x$의 그래프와 평행하다.", True),
-      ("제2사분면을 지난다.", False), ("$x$의 값이 3만큼 증가할 때 $y$의 값은 2만큼 감소한다.", False), ("점 $(3, 2)$를 지난다.", False)]
-assert F(6) * m + c == 0 and m * 3 + c != 2
-ch, ans = pick([rng.choice([s for s in st if not s[1]])] + [s for s in st if s[1]], False)
-add(U, "일차함수의 그래프의 성질", "보통", "일차함수 $y = \\frac{2}{3}x - 4$의 그래프에 대한 설명으로 옳지 않은 것은?", ans, choices=ch,
-    hint="기울기가 양수면 오른쪽 위로, y절편이 음수면 y축 아래에서 만나요.",
-    explanation="기울기 2/3 > 0, y절편 -4 → 제1, 3, 4사분면을 지나요. x가 3 증가하면 y는 2 증가해요.",
-    steps=["기울기 > 0 이면 [[오른쪽 위]]로 향함"])
-right = "제2사분면"  # a, b의 부호: a > 0, b < 0 → y = ax + b 는 제2사분면을 지나지 않음
-ch, ans = mc("$a > 0$, $b < 0$", ["$a > 0$, $b > 0$", "$a < 0$, $b > 0$", "$a < 0$, $b < 0$", "$a = 0$, $b < 0$"])
-add(U, "y = ax + b의 그래프와 a, b의 부호", "어려움", "일차함수 $y = ax + b$의 그래프가 제1, 3, 4사분면을 지날 때, $a$, $b$의 부호는?", ans, choices=ch,
-    hint="오른쪽 위로 향하면 a > 0, y축과 원점 아래에서 만나면 b < 0",
-    explanation="제1, 3, 4사분면을 지나는 직선은 오른쪽 위로 향하고 y절편이 음수예요.",
-    steps=["기울기 a [[> 0]]", "y절편 b [[< 0]]"])
-add(U, "그래프의 평행과 일치", "보통",
-    "두 일차함수 $y = 2ax - 1$, $y = -6x + 3$의 그래프가 평행할 때, 수 $a$의 값을 구하시오.", -3,
-    hint="두 직선이 평행하면 기울기가 같고 y절편은 달라요.", explanation="2a = -6 → a = -3",
-    steps=["2a = [[-6]]", "a = [[-3]]"])
-add(U, "그래프의 평행과 일치", "보통",
-    "두 일차함수 $y = -2x + b$와 $y = ax - 7$의 그래프가 일치할 때, 수 $a$, $b$에 대하여 $a + b$의 값을 구하시오.", -9,
-    hint="일치하면 기울기도 같고 y절편도 같아요.", explanation="a = -2, b = -7 → a + b = -9",
-    steps=["a = [[-2]]", "b = [[-7]]", "a + b = [[-9]]"])
+    need(S.denominator <= 2 and S <= 80)
+    return P("보통", f"일차함수 $y = {fx(m, c)}$의 그래프와 $x$축 및 $y$축으로 둘러싸인 삼각형의 넓이를 구하시오.", fpl(S),
+             hint="x절편과 y절편을 구하면 직각삼각형의 두 변 길이가 나와요.",
+             explanation=f"x절편 {fpl(xi)}, y절편 {c} → {fpl(abs(xi))} × {abs(c)} ÷ 2 = {fpl(S)}",
+             steps=[f"x절편 = [[{fpl(xi)}]]", f"y절편 = [[{c}]]", f"넓이 = [[{fpl(S)}]]"])
 
 
-def line_mc(m, c, concept, q, hint, exp):
-    right = f"$y = {fx(m, c)}$"
-    wr = [f"$y = {fx(-m, c)}$", f"$y = {fx(m, -c)}$" if c else f"$y = {fx(m, 2)}$", f"$y = {fx(c, m)}$" if c and c != m else f"$y = {fx(m, c + 3)}$",
-          f"$y = {fx(m, c + 1)}$", f"$y = {fx(m * 2, c)}$"]
+@kind(U, "세 점이 한 직선 위에 있을 조건", 12)
+def _():
+    x1, x2, x3 = R.sample(range(-6, 7), 3)
+    sl = F(nz(-4, 4), R.choice([1, 2]))
+    y1 = R.randint(-6, 6)
+    y2, y3 = y1 + sl * (x2 - x1), y1 + sl * (x3 - x1)
+    need(y2.denominator == 1 and y3.denominator == 1)
+    return P("어려움", f"세 점 $({x1}, {y1})$, $({x2}, {int(y2)})$, $({x3}, k)$가 한 직선 위에 있을 때, $k$의 값을 구하시오.", int(y3),
+             hint="어느 두 점을 골라도 기울기가 같아요.", explanation=f"기울기 {fpl(sl)} → k = {y1} + ({fpl(sl)}) × ({x3} - ({x1})) = {int(y3)}",
+             steps=[f"기울기 = [[{fpl(sl)}]]", f"k = [[{int(y3)}]]"])
+
+
+@kind(U, "일차함수의 그래프의 성질", 12)
+def _():
+    m = F(nz(-5, 5), R.choice([1, 2, 3]))
+    c = nz(-8, 8)
+    xi = F(-c) / m
+    quads = {1, 3} if m > 0 else {2, 4}
+    quads |= ({2} if (m > 0 and c > 0) else {4} if (m > 0 and c < 0) else {1} if (m < 0 and c > 0) else {3})
+    miss = ({1, 2, 3, 4} - quads).pop()
+    px = R.randint(-3, 3)
+    py = m * px + c
+    dx = m.denominator * R.randint(1, 2)
+    st = [(f"{'오른쪽 위' if m > 0 else '오른쪽 아래'}로 향하는 직선이다.", True), (f"{'오른쪽 아래' if m > 0 else '오른쪽 위'}로 향하는 직선이다.", False),
+          (f"$y$절편은 ${c}$이다.", True), (f"$y$절편은 ${-c}$이다.", False), (f"$x$절편은 ${ftex(xi)}$이다.", True), (f"$x$절편은 ${ftex(-xi)}$이다.", -xi == xi),
+          (f"$y = {fx(m, 0)}$의 그래프와 평행하다.", True), (f"$y = {fx(-m, c)}$의 그래프와 평행하다.", False),
+          (f"제{miss}사분면을 지나지 않는다.", True), (f"제{miss}사분면을 지난다.", False),
+          (f"$x$의 값이 {dx}만큼 증가할 때 $y$의 값은 {fpl(abs(m * dx))}만큼 {'증가' if m > 0 else '감소'}한다.", True),
+          (f"$x$의 값이 {dx}만큼 증가할 때 $y$의 값은 {fpl(abs(m * dx))}만큼 {'감소' if m > 0 else '증가'}한다.", False),
+          (f"점 $({px}, {fpl(py)})$를 지난다.".replace("{", "{"), True), (f"점 $({px}, {fpl(py + 1)})$를 지난다.", False)]
+    want = R.random() < 0.5
+    ch, ans = pick(st, want)
+    return P("보통", f"일차함수 $y = {fx(m, c)}$의 그래프에 대한 설명으로 {'옳은' if want else '옳지 않은'} 것은?", ans, choices=ch,
+             hint="기울기가 양수면 오른쪽 위, 음수면 오른쪽 아래. y절편으로 y축과 만나는 곳을 봐요.",
+             explanation=f"기울기 {fpl(m)}, y절편 {c}, x절편 {fpl(xi)} → 제{', '.join(map(str, sorted(quads)))}사분면을 지나요.",
+             steps=[f"기울기 = [[{fpl(m)}]]", f"y절편 = [[{c}]]"])
+
+
+@kind(U, "y = ax + b의 그래프와 a, b의 부호", 8)
+def _():
+    sa, sb = R.choice([1, -1]), R.choice([1, -1])
+    quads = ({1, 3} if sa > 0 else {2, 4}) | ({2} if (sa > 0 and sb > 0) else {4} if (sa > 0 and sb < 0) else {1} if (sa < 0 and sb > 0) else {3})
+    def s(v):
+        return "> 0" if v > 0 else "< 0"
+    right = f"$a {s(sa)}$, $b {s(sb)}$"
+    wr = [f"$a {s(p_)}$, $b {s(q_)}$" for p_ in (1, -1) for q_ in (1, -1) if (p_, q_) != (sa, sb)] + ["$a = 0$, $b > 0$", "$a = 0$, $b < 0$"]
     ch, ans = mc(right, wr)
-    add(U, concept, "보통", q, ans, choices=ch, hint=hint, explanation=exp, steps=[f"기울기 = [[{fpl(m)}]]", f"y절편 = [[{fpl(c)}]]"])
+    if R.random() < 0.5:
+        q = f"일차함수 $y = ax + b$의 그래프가 제{', '.join(map(str, sorted(quads)))}사분면을 지날 때, $a$, $b$의 부호는?"
+    else:
+        q = f"일차함수 $y = ax + b$의 그래프가 {'오른쪽 위' if sa > 0 else '오른쪽 아래'}로 향하고, $y$축과 원점보다 {'위' if sb > 0 else '아래'}쪽에서 만날 때, $a$, $b$의 부호는?"
+    return P("어려움", q, ans, choices=ch, hint="오른쪽 위로 향하면 a > 0, y절편이 원점보다 위면 b > 0",
+             explanation=f"기울기 a {s(sa)}, y절편 b {s(sb)}", steps=[f"a [[{s(sa)}]]", f"b [[{s(sb)}]]"])
 
 
-line_mc(F(-2), -1, "식 구하기: 기울기와 y절편", "$x$의 값이 3만큼 증가할 때 $y$의 값은 6만큼 감소하고, $y$절편이 $-1$인 직선을 그래프로 하는 일차함수의 식은?",
-        "기울기 = (y의 증가량) ÷ (x의 증가량)", "기울기 -6/3 = -2, y절편 -1 → y = -2x - 1")
-c_ = 1 - F(-2) * 2  # 기울기 -2, 점 (2, 1)
-line_mc(F(-2), c_, "식 구하기: 기울기와 한 점", "$x$의 값이 1에서 4까지 증가할 때 $y$의 값은 6만큼 감소하고, 점 $(2, 1)$을 지나는 직선을 그래프로 하는 일차함수의 식은?",
-        "기울기를 먼저 구하고, y = ax + b에 점을 대입해 b를 구해요.", f"기울기 -6/3 = -2, 1 = -2 × 2 + b → b = {fpl(c_)}")
-s2 = F(7 - 1, 5 - 2)
-line_mc(s2, 1 - s2 * 2, "식 구하기: 두 점", "두 점 $(2, 1)$, $(5, 7)$을 지나는 일차함수의 그래프의 식은?",
-        "두 점으로 기울기를 구한 뒤 한 점을 대입해요.", f"기울기 6/3 = 2, 1 = 2 × 2 + b → b = -3")
-line_mc(F(-4, 3), 4, "식 구하기: x절편과 y절편",
-        "$x$절편이 3, $y$절편이 4인 직선을 그래프로 하는 일차함수의 식은?",
-        "두 점 (3, 0), (0, 4)를 지나요. 기울기 = -(y절편)/(x절편)", "기울기 (4 - 0)/(0 - 3) = -4/3, y절편 4")
-# 활용
-t_ = [s for s in range(0, 200) if 150 - 4 * s == 70][0]
-add(U, "활용: 높이·온도", "보통", "지면에서 150 m 높이에 떠 있던 열기구가 1초에 4 m씩 일정하게 내려온다. 내려오기 시작한 지 몇 초 후에 지면에서 높이가 70 m가 되는지 구하시오.", t_,
-    hint="x초 후 높이를 y m라 하면 y = 150 - 4x", explanation=f"70 = 150 - 4x → x = {t_}", steps=["y = 150 - [[4]]x", f"x = [[{t_}]]"])
-w_ = 30 + F(6, 4) * 20
-add(U, "활용: 물의 양", "보통", "물이 30 L 들어 있는 수조에 4분에 6 L씩 일정하게 물을 더 넣는다. 20분 후 수조에 들어 있는 물의 양은 몇 L인지 구하시오.", fpl(w_),
-    hint="1분에 6/4 = 3/2 L씩 늘어나요.", explanation=f"y = 30 + 3/2 x, x = 20 → y = {fpl(w_)}", steps=["1분에 [[3/2]] L", f"y = [[{fpl(w_)}]]"])
-rem = 240 - 80 * F(3, 2)
-add(U, "활용: 거리, 속력, 시간", "보통", "240 km 떨어진 할머니 댁까지 기차를 타고 시속 80 km로 갈 때, 출발한 지 1시간 30분 후 할머니 댁까지 남은 거리는 몇 km인지 구하시오.", fpl(rem),
-    hint="x시간 후 남은 거리 y = 240 - 80x", explanation=f"y = 240 - 80 × 3/2 = {fpl(rem)}", steps=["1시간 30분 = [[3/2]]시간", f"y = [[{fpl(rem)}]]"])
-tt = F(30 * 2, 8)
-add(U, "활용: 도형", "어려움",
-    "가로 10 cm, 세로 8 cm인 직사각형 ABCD에서 점 P가 꼭짓점 B를 출발하여 변 BC 위를 C 쪽으로 1초에 1 cm씩 움직인다. 삼각형 ABP의 넓이가 30 cm²가 되는 것은 출발한 지 몇 초 후인지 구하시오. (단, AB = 8 cm, BC = 10 cm)",
-    fpl(tt), hint="x초 후 BP = x cm, 삼각형 ABP의 넓이 y = 8 × x ÷ 2 = 4x",
-    explanation=f"4x = 30 → x = {fpl(tt)}초", steps=["y = [[4]]x", f"x = [[{fpl(tt)}]]"])
+@kind(U, "일차함수의 그래프의 평행과 일치", 12)
+def _():
+    k = nz(-4, 4, (0,))
+    m = nz(-8, 8)
+    need(m % k == 0)
+    if R.random() < 0.5:
+        c1, c2 = R.randint(-6, 6), R.randint(-6, 6)
+        need(c1 != c2)
+        return P("보통", f"두 일차함수 $y = {k if k not in (1, -1) else ('-' if k < 0 else '')}ax {sgn(c1)}$, $y = {fx(m, c2)}$의 그래프가 평행할 때, 수 $a$의 값을 구하시오.", m // k,
+                 hint="두 직선이 평행하면 기울기가 같고 y절편은 달라요.", explanation=f"{k}a = {m} → a = {m // k}",
+                 steps=[f"{k}a = [[{m}]]", f"a = [[{m // k}]]"])
+    return _coincide(nz(-6, 6), nz(-9, 9))
+
+
+def _coincide(av, bv):
+    c2 = R.randint(-9, 9)
+    # y = a x + (bv)  와  y = av x + (b + c2) 가 일치 -> a = av, bv = b + c2 -> b = bv - c2
+    bval = bv - c2
+    combo = R.choice([("a + b", av + bval), ("ab", av * bval), ("a - b", av - bval)])
+    return P("보통", f"두 일차함수 $y = ax {sgn(bv)}$와 $y = {fx(av, 0)} + b {sgn(c2)}$의 그래프가 일치할 때, 수 $a$, $b$에 대하여 ${combo[0]}$의 값을 구하시오.".replace(" + 0$", "$"),
+             combo[1], hint="일치하면 기울기도 같고 y절편도 같아요.",
+             explanation=f"a = {av}, b {sgn(c2)} = {bv} → b = {bval} → {combo[0]} = {combo[1]}",
+             steps=[f"a = [[{av}]]", f"b = [[{bval}]]", f"{combo[0]} = [[{combo[1]}]]"])
+
+
+def line_mc(m, c, q, hint, ex, level="보통"):
+    right = f"$y = {fx(m, c)}$"
+    wr = [f"$y = {fx(-m, c)}$", f"$y = {fx(m, -c)}$" if c else f"$y = {fx(m, 2)}$", f"$y = {fx(m, c + 1)}$", f"$y = {fx(m, c - 1)}$",
+          f"$y = {fx(m * 2, c)}$", f"$y = {fx(c, m)}$" if c and c != m else f"$y = {fx(m, c + 3)}$", f"$y = {fx(-m, -c)}$"]
+    ch, ans = mc(right, wr)
+    return P(level, q, ans, choices=ch, hint=hint, explanation=ex, steps=[f"기울기 = [[{fpl(m)}]]", f"y절편 = [[{fpl(c)}]]"])
+
+
+@kind(U, "일차함수의 식 구하기: 기울기와 y절편", 12)
+def _():
+    dx = R.randint(1, 4)
+    m = F(nz(-4, 4), R.choice([1, 1, 2]))
+    dy = m * dx
+    need(dy.denominator == 1 and dy != 0)
+    c = nz(-7, 7)
+    if R.random() < 0.5:
+        q = f"$x$의 값이 {dx}만큼 증가할 때 $y$의 값은 {abs(int(dy))}만큼 {'증가' if dy > 0 else '감소'}하고, $y$절편이 ${c}$인 직선을 그래프로 하는 일차함수의 식은?"
+    else:
+        m0 = R.choice([1, 2, -1, 3])
+        q = f"일차함수 $y = {fx(m, m0)}$의 그래프와 평행하고, $y$절편이 ${c}$인 직선을 그래프로 하는 일차함수의 식은?"
+        need(m0 != c)
+    return line_mc(m, c, q, "기울기 = (y의 증가량) ÷ (x의 증가량), 평행하면 기울기가 같아요.", f"기울기 {fpl(m)}, y절편 {c} → y = {fx(m, c, tex=False)}")
+
+
+@kind(U, "일차함수의 식 구하기: 기울기와 한 점", 12)
+def _():
+    m = F(nz(-4, 4), R.choice([1, 1, 2]))
+    px, py = nz(-4, 4), R.randint(-6, 6)
+    c = py - m * px
+    need(c.denominator == 1)
+    x1 = R.randint(-3, 3)
+    dx = R.randint(1, 4)
+    dy = m * dx
+    need(dy.denominator == 1)
+    q = f"$x$의 값이 ${x1}$에서 ${x1 + dx}$까지 증가할 때 $y$의 값은 {abs(int(dy))}만큼 {'증가' if dy > 0 else '감소'}하고, 점 $({px}, {py})$를 지나는 직선을 그래프로 하는 일차함수의 식은?"
+    return line_mc(m, c, q, "기울기를 먼저 구하고, y = ax + b에 점을 대입해 b를 구해요.", f"기울기 {fpl(m)}, {py} = {fpl(m)} × ({px}) + b → b = {fpl(c)}")
+
+
+@kind(U, "일차함수의 식 구하기: 두 점", 12)
+def _():
+    x1, x2 = nz(-5, 5), nz(-5, 5)
+    need(x1 != x2)
+    m = F(nz(-4, 4), R.choice([1, 1, 2]))
+    y1 = R.randint(-6, 6)
+    y2 = y1 + m * (x2 - x1)
+    c = y1 - m * x1
+    need(y2.denominator == 1 and c.denominator == 1)
+    return line_mc(m, c, f"두 점 $({x1}, {y1})$, $({x2}, {int(y2)})$를 지나는 일차함수의 그래프의 식은?",
+                   "두 점으로 기울기를 구한 뒤 한 점을 대입해 y절편을 구해요.", f"기울기 {fpl(m)}, {y1} = {fpl(m)} × ({x1}) + b → b = {fpl(c)}")
+
+
+@kind(U, "일차함수의 식 구하기: x절편과 y절편", 12)
+def _():
+    xi, yi = nz(-6, 6), nz(-6, 6)
+    m = F(-yi, xi)
+    return line_mc(m, yi, f"$x$절편이 ${xi}$, $y$절편이 ${yi}$인 직선을 그래프로 하는 일차함수의 식은?",
+                   f"두 점 ({xi}, 0), (0, {yi})를 지나요. 기울기 = -(y절편) ÷ (x절편)", f"기울기 ({yi} - 0) ÷ (0 - ({xi})) = {fpl(m)}, y절편 {yi}")
+
+
+@kind(U, "일차함수의 활용: 온도, 높이, 길이", 12)
+def _():
+    mode = R.randint(0, 2)
+    if mode == 0:
+        h0, v = R.choice([90, 120, 150, 180, 200, 240]), R.choice([2, 3, 4, 5, 6])
+        target = R.randint(1, h0 // v - 1) * v
+        tt = (h0 - target) // v
+        return P("보통", f"지면에서 {h0} m 높이에 떠 있던 열기구가 1초에 {v} m씩 일정하게 내려온다. 내려오기 시작한 지 몇 초 후에 지면에서 높이가 {target} m가 되는지 구하시오.", tt,
+                 hint=f"x초 후 높이를 y m라 하면 y = {h0} - {v}x", explanation=f"{target} = {h0} - {v}x → x = {tt}", steps=[f"y = {h0} - [[{v}]]x", f"x = [[{tt}]]"])
+    if mode == 1:
+        t0, dm, dt = R.choice([80, 90, 70, 60]), R.choice([2, 3, 4, 5]), R.choice([3, 4, 5, 6])
+        mins = R.randint(2, 6) * dm
+        tv = t0 - F(dt, dm) * mins
+        need(tv > 20)
+        return P("보통", f"{t0} °C의 물을 실온에 두면 {dm}분마다 {dt} °C씩 일정하게 온도가 내려간다. {mins}분 후의 물의 온도는 몇 °C인지 구하시오.", fpl(tv),
+                 hint=f"1분에 {fpl(F(dt, dm))} °C씩 내려가요.", explanation=f"y = {t0} - {fpl(F(dt, dm))}x, x = {mins} → y = {fpl(tv)}",
+                 steps=[f"1분에 [[{fpl(F(dt, dm))}]] °C", f"y = [[{fpl(tv)}]]"])
+    L0, burn = R.choice([20, 24, 30, 36]), F(R.randint(1, 4), R.choice([1, 2, 5]))
+    mins = R.randint(2, 12) * burn.denominator
+    rem = L0 - burn * mins
+    need(rem > 0)
+    return P("보통", f"길이가 {L0} cm인 양초에 불을 붙이면 1분에 {fpl(burn)} cm씩 일정하게 짧아진다. 불을 붙인 지 {mins}분 후 양초의 길이는 몇 cm인지 구하시오.".replace("1/", "1/"), fpl(rem),
+             hint=f"x분 후 길이 y = {L0} - {fpl(burn)}x", explanation=f"y = {L0} - {fpl(burn)} × {mins} = {fpl(rem)}", steps=[f"y = [[{fpl(rem)}]]"])
+
+
+@kind(U, "일차함수의 활용: 물의 양", 12)
+def _():
+    w0 = R.choice([20, 30, 40, 50, 80, 100])
+    dm, dv = R.choice([(2, 3), (3, 5), (4, 6), (5, 8), (1, 2), (3, 4)])
+    fill = R.random() < 0.5
+    mins = R.randint(2, 8) * dm
+    v = w0 + (1 if fill else -1) * F(dv, dm) * mins
+    need(v > 0)
+    return P("보통", f"물이 {w0} L 들어 있는 수조{'에' if fill else '에서'} {dm}분에 {dv} L씩 일정하게 물을 {'넣는다' if fill else '빼낸다'}. {mins}분 후 수조에 들어 있는 물의 양은 몇 L인지 구하시오.", fpl(v),
+             hint=f"1분에 {fpl(F(dv, dm))} L씩 {'늘어나요' if fill else '줄어들어요'}.",
+             explanation=f"y = {w0} {'+' if fill else '-'} {fpl(F(dv, dm))}x, x = {mins} → y = {fpl(v)}", steps=[f"1분에 [[{fpl(F(dv, dm))}]] L", f"y = [[{fpl(v)}]]"])
+
+
+@kind(U, "일차함수의 활용: 거리, 속력, 시간", 12)
+def _():
+    D, v = R.choice([(240, 80), (300, 60), (180, 60), (270, 90), (200, 50), (150, 60), (360, 80)])
+    tt = F(R.randint(1, 2 * D // v - 1), 2)
+    rem = D - v * tt
+    need(rem > 0)
+    h, mi = int(tt), int((tt - int(tt)) * 60)
+    tstr = (f"{h}시간" if h else "") + (f" {mi}분" if mi else "")
+    place = R.choice(["할머니 댁", "캠핑장", "바닷가", "수목원"])
+    return P("보통", f"{D} km 떨어진 {place}까지 시속 {v} km로 갈 때, 출발한 지 {tstr.strip()} 후 {place}까지 남은 거리는 몇 km인지 구하시오.", fpl(rem),
+             hint=f"x시간 후 남은 거리 y = {D} - {v}x", explanation=f"{tstr.strip()} = {fpl(tt)}시간, y = {D} - {v} × {fpl(tt)} = {fpl(rem)}",
+             steps=[f"시간: [[{fpl(tt)}]]시간", f"y = [[{fpl(rem)}]]"])
+
+
+@kind(U, "일차함수의 활용: 도형", 10)
+def _():
+    W, H = R.randint(6, 16), R.randint(4, 12)
+    sp_ = R.choice([1, 2])
+    S = R.randint(4, H * W // 2 - 1)
+    tt = F(2 * S, H * sp_)
+    need(0 < tt * sp_ < W and tt.denominator <= 2)
+    return P("어려움", f"가로 {W} cm, 세로 {H} cm인 직사각형 ABCD에서 점 P가 꼭짓점 B를 출발하여 변 BC 위를 C 쪽으로 1초에 {sp_} cm씩 움직인다. 삼각형 ABP의 넓이가 {S} cm²가 되는 것은 출발한 지 몇 초 후인지 구하시오. (단, AB = {H} cm, BC = {W} cm)",
+             fpl(tt), hint=f"x초 후 BP = {sp_}x cm, 삼각형 ABP의 넓이 y = {H} × {sp_}x ÷ 2",
+             explanation=f"y = {fpl(F(H * sp_, 2))}x = {S} → x = {fpl(tt)}", steps=[f"y = [[{fpl(F(H * sp_, 2))}]]x", f"x = [[{fpl(tt)}]]"])
+
 
 # ═════════════════════ 7. 일차함수와 일차방정식의 관계 ═════════════════════
 U = "7. 일차함수와 일차방정식"
-right = "$y = \\frac{2}{3}x - 2$"
-ch, ans = mc(right, ["$y = -\\frac{2}{3}x - 2$", "$y = \\frac{2}{3}x + 2$", "$y = \\frac{3}{2}x - 2$", "$y = 2x - 6$"])
-add(U, "일차함수와 일차방정식의 관계", "쉬움", "일차방정식 $2x - 3y - 6 = 0$의 그래프와 같은 직선을 그래프로 하는 일차함수는?", ans, choices=ch,
-    hint="y에 대하여 풀어요: y = ... 꼴로", explanation="-3y = -2x + 6 → y = 2/3 x - 2", steps=["-3y = -2x + [[6]]", "y = [[2/3]]x - 2"])
-for (A1, B1, C1), (px, py), ask in [((4, 1, -5), (2, None), "y"), ((2, None, -6), (-1, 4), "a")]:  # 그래프 위의 점
-    if ask == "y":
-        val_ = -(A1 * px + C1) // B1
-        add(U, "일차방정식의 그래프 위의 점", "쉬움", f"점 $({px}, k)$가 일차방정식 $4x + y - 5 = 0$의 그래프 위에 있을 때, $k$의 값을 구하시오.", val_,
-            hint="점의 좌표를 대입해요.", explanation=f"8 + k - 5 = 0 → k = {val_}", steps=[f"k = [[{val_}]]"])
+
+
+@kind(U, "일차함수와 일차방정식의 관계", 12)
+def _():
+    A1, B1, C1 = nz(-5, 5), nz(-5, 5), R.randint(-9, 9)
+    m, c = F(-A1, B1), F(-C1, B1)
+    right = f"$y = {fx(m, c)}$"
+    wr = [f"$y = {fx(-m, c)}$", f"$y = {fx(m, -c)}$", f"$y = {fx(-m, -c)}$", f"$y = {fx(F(B1, A1) if True else 0, c)}$" if F(B1, A1) != m else f"$y = {fx(m, c + 1)}$",
+          f"$y = {fx(A1, C1)}$", f"$y = {fx(m, c + 2)}$"]
+    ch, ans = mc(right, wr)
+    return P("쉬움", f"일차방정식 ${lin(A1, B1, C1)} = 0$의 그래프와 같은 직선을 그래프로 하는 일차함수는?", ans, choices=ch,
+             hint="y에 대하여 풀어요: y = ... 꼴로", explanation=f"{B1}y = {lin(-A1, 0, -C1, tex=False)} → y = {fx(m, c, tex=False)}",
+             steps=[f"기울기 = [[{fpl(m)}]]", f"y절편 = [[{fpl(c)}]]"])
+
+
+@kind(U, "일차방정식의 그래프 위의 점", 12)
+def _():
+    A1, B1 = nz(-5, 5), nz(-5, 5)
+    px, py = nz(-5, 5), nz(-5, 5)
+    C1 = -(A1 * px + B1 * py)
+    if R.random() < 0.5:
+        return P("쉬움", f"점 $({px}, k)$가 일차방정식 ${lin(A1, B1, C1)} = 0$의 그래프 위에 있을 때, $k$의 값을 구하시오.", py,
+                 hint="점의 좌표를 대입해요.", explanation=f"({A1})×({px}) + ({B1})k {sgn(C1)} = 0 → k = {py}", steps=[f"k = [[{py}]]"])
+    return P("보통", f"일차방정식 $ax {sgn(B1)}y {sgn(C1)} = 0$의 그래프가 점 $({px}, {py})$를 지날 때, 수 $a$의 값을 구하시오.".replace("+ 1y", "+ y").replace("- 1y", "- y").replace(" + 0 =", " ="),
+             A1, hint="점의 좌표를 대입해 a에 대한 방정식을 풀어요.", explanation=f"({px})a + ({B1})×({py}) {sgn(C1)} = 0 → a = {A1}", steps=[f"a = [[{A1}]]"])
+
+
+@kind(U, "직선의 방정식 구하기", 12)
+def _():
+    A1, B1 = nz(-5, 5), R.choice([1, 1, 2, -1])
+    m = F(-A1, B1)
+    xi = nz(-5, 5)
+    c = -m * xi
+    need(c.denominator == 1)
+    # 정답을 ax + by + c = 0 꼴(정수)로: B1 y = -A1 x + B1 c  -> A1 x + B1 y - B1 c = 0
+    k = -B1 * c
+    def eqs(p_, q_, r_):
+        return f"${lin(p_, q_, r_)} = 0$"
+    right = eqs(A1, B1, k)
+    wr = [eqs(A1, -B1, k), eqs(A1, B1, -k), eqs(B1, A1, k), eqs(A1, B1, k + 1), eqs(-A1, B1, k), eqs(A1, B1, k - 2)]
+    ch, ans = mc(right, wr)
+    c0 = R.randint(-9, 9)
+    need(c0 != k)
+    return P("보통", f"직선 ${lin(A1, B1, c0)} = 0$과 평행하고, $x$절편이 ${xi}$인 직선의 방정식은?".replace(" + 0 = 0", " = 0"), ans, choices=ch,
+             hint=f"평행하면 기울기가 같아요. 기울기 {fpl(m)}, 점 ({xi}, 0)을 지나요.",
+             explanation=f"y = {fx(m, 0, tex=False)} + b, 0 = {fpl(m)} × ({xi}) + b → b = {fpl(c)} → {right.strip('$')}",
+             steps=[f"기울기 = [[{fpl(m)}]]", f"y절편 = [[{fpl(c)}]]"])
+
+
+@kind(U, "좌표축에 평행한 직선", 14)
+def _():
+    mode = R.random()
+    if mode < 0.4:
+        p1, p2 = (nz(-6, 6), nz(-6, 6)), (nz(-6, 6), nz(-6, 6))
+        d1 = R.choice(["x축에 수직인", "y축에 평행한"])
+        d2 = R.choice(["y축에 수직인", "x축에 평행한"])
+        ans_ = p1[0] + p2[1]
+        return P("쉬움", f"점 $({p1[0]}, {p1[1]})$을 지나고 ${d1[0]}$축{d1[2:]} 직선과 점 $({p2[0]}, {p2[1]})$을 지나고 ${d2[0]}$축{d2[2:]} 직선의 교점의 좌표를 $(p, q)$라 할 때, $p + q$의 값을 구하시오.", ans_,
+                 hint="x축에 수직(y축에 평행)인 직선은 x = (수), y축에 수직(x축에 평행)인 직선은 y = (수)",
+                 explanation=f"x = {p1[0]}, y = {p2[1]} → 교점 ({p1[0]}, {p2[1]}) → p + q = {ans_}",
+                 steps=[f"x = [[{p1[0]}]]", f"y = [[{p2[1]}]]", f"p + q = [[{ans_}]]"])
+    k1, k2 = nz(-4, 4, (0, 1)), nz(-4, 4)
+    need(k1 != k2)
+    c1, c2 = R.randint(-8, 8), R.randint(-8, 8)
+    av = F(c2 - c1, k1 - k2)
+    need(av.denominator == 1)
+    ya, yb = R.randint(-6, 6), R.randint(-6, 6)
+    need(ya != yb)
+    axis = R.choice(["$y$축에 평행할", "$x$축에 수직일"])
+    return P("보통", f"두 점 $({lin(k1, 0, c1, 'a')}, {ya})$, $({lin(k2, 0, c2, 'a')}, {yb})$를 지나는 직선이 {axis} 때, $a$의 값을 구하시오.",
+             int(av), hint="y축에 평행(x축에 수직)한 직선 위의 점은 x좌표가 모두 같아요.",
+             explanation=f"{lin(k1, 0, c1, 'a', tex=False)} = {lin(k2, 0, c2, 'a', tex=False)} → a = {int(av)}", steps=[f"a = [[{int(av)}]]"])
+
+
+@kind(U, "ax + by + c = 0의 그래프와 부호", 8)
+def _():
+    sa, sb = R.choice([1, -1]), R.choice([1, -1])
+    def s(v):
+        return "> 0" if v > 0 else "< 0"
+    # ax + by - 1 = 0: x절편 1/a, y절편 1/b
+    right = f"$a {s(sa)}$, $b {s(sb)}$"
+    wr = [f"$a {s(p_)}$, $b {s(q_)}$" for p_ in (1, -1) for q_ in (1, -1) if (p_, q_) != (sa, sb)] + ["$a = 0$, $b > 0$", "$a > 0$, $b = 0$"]
+    ch, ans = mc(right, wr)
+    return P("어려움", f"일차방정식 $ax + by - 1 = 0$의 그래프의 $x$절편이 {'양수' if sa > 0 else '음수'}, $y$절편이 {'양수' if sb > 0 else '음수'}일 때, $a$, $b$의 부호는?", ans, choices=ch,
+             hint="x절편 = 1/a, y절편 = 1/b", explanation=f"1/a {s(sa)}, 1/b {s(sb)} → a {s(sa)}, b {s(sb)}", steps=["x절편 = [[1/a]]", "y절편 = [[1/b]]"])
+
+
+@kind(U, "연립방정식의 해와 그래프의 교점", 14)
+def _():
+    sx, sy = nz(-5, 5), nz(-5, 5)
+    a1, b1, a2, b2 = (nz(-4, 4) for _ in range(4))
+    need(a1 * b2 - a2 * b1 != 0)
+    c1, c2 = -(a1 * sx + b1 * sy), -(a2 * sx + b2 * sy)
+    combo = R.choice([("p + q", sx + sy), ("pq", sx * sy), ("p - q", sx - sy)])
+    if R.random() < 0.7:
+        return P("보통", f"두 일차방정식 ${lin(a1, b1, c1)} = 0$, ${lin(a2, b2, c2)} = 0$의 그래프의 교점의 좌표를 $(p, q)$라 할 때, ${combo[0]}$의 값을 구하시오.", combo[1],
+                 hint="두 그래프의 교점 = 연립방정식의 해", explanation=f"연립해서 풀면 x = {sx}, y = {sy}",
+                 steps=[f"p = [[{sx}]]", f"q = [[{sy}]]", f"{combo[0]} = [[{combo[1]}]]"])
+    av = nz(-5, 5)
+    c2b = -(av * sx + b2 * sy)
+    return P("어려움", f"두 일차방정식 ${lin(a1, b1, c1)} = 0$, $ax {sgn(b2)}y {sgn(c2b)} = 0$의 그래프의 교점의 $x$좌표가 ${sx}$일 때, 수 $a$의 값을 구하시오.".replace("+ 1y", "+ y").replace("- 1y", "- y").replace(" + 0 =", " ="),
+             av, hint="a가 없는 식에 x좌표를 넣어 y좌표를 먼저 구해요.", explanation=f"교점 ({sx}, {sy}) → ({sx})a + ({b2})×({sy}) {sgn(c2b)} = 0 → a = {av}",
+             steps=[f"교점의 y좌표 = [[{sy}]]", f"a = [[{av}]]"])
+
+
+@kind(U, "두 직선의 교점을 지나는 직선", 12)
+def _():
+    sx, sy = nz(-4, 4), nz(-5, 5)
+    a1, b1, a2, b2 = (nz(-4, 4) for _ in range(4))
+    need(a1 * b2 - a2 * b1 != 0)
+    c1, c2 = -(a1 * sx + b1 * sy), -(a2 * sx + b2 * sy)
+    m = nz(-4, 4)
+    c = sy - m * sx
+    if R.random() < 0.5:
+        q = f"두 직선 ${lin(a1, b1, c1)} = 0$, ${lin(a2, b2, c2)} = 0$의 교점을 지나고, 기울기가 ${m}$인 직선의 방정식은?"
     else:
-        av = F(-(A1 * px + C1), py)  # 2x + ay - 6 = 0 at (-1, 4): -2 + 4a - 6 = 0 → a = 2
-        add(U, "일차방정식의 그래프 위의 점", "보통", f"일차방정식 $2x + ay - 6 = 0$의 그래프가 점 $({px}, {py})$를 지날 때, 수 $a$의 값을 구하시오.", fpl(av),
-            hint="점의 좌표를 대입해 a에 대한 방정식을 풀어요.", explanation=f"2×({px}) + {py}a - 6 = 0 → a = {fpl(av)}", steps=[f"a = [[{fpl(av)}]]"])
-assert -3 * (-1) + (-3) == 0  # 3x + y = 2 와 평행 (기울기 -3), x절편 -1 -> y = -3x - 3
-ch, ans = mc("$3x + y + 3 = 0$", ["$3x - y + 3 = 0$", "$3x + y - 3 = 0$", "$x + 3y + 3 = 0$", "$3x + y + 1 = 0$"])
-add(U, "직선의 방정식 구하기", "보통", "직선 $3x + y = 2$와 평행하고, $x$절편이 $-1$인 직선의 방정식은?", ans, choices=ch,
-    hint="평행하면 기울기가 같아요. 기울기 -3, 점 (-1, 0)을 지나요.", explanation="y = -3x + b, 0 = 3 + b → b = -3 → 3x + y + 3 = 0",
-    steps=["기울기 = [[-3]]", "y절편 = [[-3]]"])
-add(U, "좌표축에 평행한 직선", "쉬움", "점 $(4, -2)$를 지나고 $x$축에 수직인 직선과 점 $(-1, 3)$을 지나고 $y$축에 수직인 직선의 교점의 좌표를 $(p, q)$라 할 때, $p + q$의 값을 구하시오.", 7,
-    hint="x축에 수직인 직선은 x = (수), y축에 수직인 직선은 y = (수)", explanation="x = 4, y = 3 → 교점 (4, 3) → p + q = 7",
-    steps=["x = [[4]]", "y = [[3]]", "p + q = [[7]]"])
-av = [k for k in range(-20, 20) if 3 * k - 2 == k + 4][0]
-add(U, "좌표축에 평행한 직선", "보통", "두 점 $(3a - 2, 5)$, $(a + 4, -1)$을 지나는 직선이 $y$축에 평행할 때, $a$의 값을 구하시오.", av,
-    hint="y축에 평행한 직선 위의 점은 x좌표가 모두 같아요.", explanation=f"3a - 2 = a + 4 → a = {av}", steps=["3a - 2 = a + [[4]]", f"a = [[{av}]]"])
-ch, ans = mc("$a > 0$, $b > 0$", ["$a > 0$, $b < 0$", "$a < 0$, $b > 0$", "$a < 0$, $b < 0$", "$a = 0$, $b > 0$"])
-add(U, "ax + by + c = 0의 그래프와 부호", "어려움",
-    "일차방정식 $ax + by - 1 = 0$의 그래프가 $x$절편과 $y$절편이 모두 양수인 직선일 때, $a$, $b$의 부호는?", ans, choices=ch,
-    hint="x절편 = 1/a, y절편 = 1/b", explanation="1/a > 0, 1/b > 0 → a > 0, b > 0", steps=["x절편 = [[1/a]]", "y절편 = [[1/b]]"])
-for (a1, b1, c1), (a2, b2, c2) in [((1, 3, -5), (2, -1, 4)), ((1, -2, 1), (3, 1, -11))]:  # 교점
-    X, Y = sp.symbols("X Y")
-    so = sp.solve([a1 * X + b1 * Y + c1, a2 * X + b2 * Y + c2], [X, Y])
-    xs, ys = so[X], so[Y]
-    add(U, "연립방정식의 해와 그래프", "보통",
-        f"두 일차방정식 ${lin(a1, b1, c1)} = 0$, ${lin(a2, b2, c2)} = 0$의 그래프의 교점의 좌표를 $(p, q)$라 할 때, $p + q$의 값을 구하시오.", fpl(F(int(sp.fraction(xs + ys)[0]), int(sp.fraction(xs + ys)[1]))),
-        hint="두 그래프의 교점 = 연립방정식의 해", explanation=f"연립해서 풀면 x = {xs}, y = {ys}",
-        steps=[f"p = [[{xs}]]", f"q = [[{ys}]]", f"p + q = [[{xs + ys}]]"])
-X, Y = sp.symbols("X Y")
-so = sp.solve([2 * X + Y - 1, X - 3 * Y - 11], [X, Y])  # 교점 (2, -3)
-right_c = so[Y] - 3 * so[X]  # 기울기 3
-ch, ans = mc(f"$y = {fx(3, F(int(right_c)))}$", [f"$y = {fx(3, F(int(right_c)) + 3)}$", f"$y = {fx(-3, F(int(right_c)))}$", f"$y = {fx(3, -F(int(right_c)))}$", f"$y = {fx(F(1, 3), F(int(right_c)))}$"])
-add(U, "두 직선의 교점을 지나는 직선", "어려움",
-    "두 직선 $2x + y - 1 = 0$, $x - 3y - 11 = 0$의 교점을 지나고, 기울기가 3인 직선의 방정식은?", ans, choices=ch,
-    hint="먼저 연립해서 교점을 구한 뒤 y = 3x + b에 대입해요.", explanation=f"교점 ({so[X]}, {so[Y]}) → b = {right_c}",
-    steps=[f"교점: ([[{so[X]}]], [[{so[Y]}]])", f"y절편 = [[{right_c}]]"])
-so = sp.solve([X + Y - 4, 2 * X - Y - 2], [X, Y])  # 두 직선과 y축으로 둘러싸인 넓이
-S = sp.Rational(1, 2) * (4 - (-2)) * so[X]
-add(U, "두 직선과 좌표축으로 둘러싸인 넓이", "어려움",
-    "두 직선 $x + y = 4$, $2x - y = 2$와 $y$축으로 둘러싸인 삼각형의 넓이를 구하시오.", fpl(F(int(sp.fraction(S)[0]), int(sp.fraction(S)[1]))),
-    hint="두 직선의 y절편(4와 -2)을 밑변으로, 교점의 x좌표를 높이로 봐요.", explanation=f"교점 ({so[X]}, {so[Y]}), 밑변 6, 높이 {so[X]} → 넓이 {S}",
-    steps=["밑변 = [[6]]", f"높이 = [[{so[X]}]]", f"넓이 = [[{S}]]"])
-so = sp.solve([X - Y + 1, 2 * X + Y - 7], [X, Y])  # 한 점에서 만나는 세 직선
-av = F(int(-(3 * so[Y] - 1)), int(so[X])) if so[X] != 0 else None
-# ax + 3y - 1 = 0 이 (2, 3) 을 지남: 2a + 9 - 1 = 0 → a = -4
-av = F(-(3 * int(so[Y]) - 1), int(so[X]))
-add(U, "한 점에서 만나는 세 직선", "어려움",
-    "세 직선 $x - y + 1 = 0$, $2x + y - 7 = 0$, $ax + 3y - 1 = 0$이 한 점에서 만날 때, 수 $a$의 값을 구하시오.", fpl(av),
-    hint="a가 없는 두 직선의 교점을 먼저 구하고, 세 번째 식에 대입해요.", explanation=f"교점 ({so[X]}, {so[Y]}) → {so[X]}a + {3 * so[Y]} - 1 = 0 → a = {fpl(av)}",
-    steps=[f"교점: ([[{so[X]}]], [[{so[Y]}]])", f"a = [[{fpl(av)}]]"])
-add(U, "해의 개수: 두 직선이 일치할 때", "어려움",
-    "연립방정식 $\\begin{cases} 2x - ay = 4 \\\\ -6x + 9y = b \\end{cases}$의 해가 무수히 많을 때, 수 $a$, $b$에 대하여 $a + b$의 값을 구하시오.", -9,
-    hint="해가 무수히 많으면 두 직선이 일치해요: 첫 식에 -3을 곱하면 둘째 식과 같아야 해요.", explanation="-6x + 3ay = -12 와 같아야 하므로 3a = 9 → a = 3, b = -12 → a + b = -9",
-    steps=["a = [[3]]", "b = [[-12]]", "a + b = [[-9]]"])
-add(U, "해의 개수: 두 직선이 평행할 때", "어려움",
-    "연립방정식 $\\begin{cases} 2x - y = 3 \\\\ ax + 2y = 5 \\end{cases}$의 해가 없을 때, 수 $a$의 값을 구하시오.", -4,
-    hint="해가 없으면 두 직선이 평행해요: 기울기는 같고 y절편은 달라요.", explanation="y = 2x - 3, y = -a/2 x + 5/2 → -a/2 = 2 → a = -4",
-    steps=["첫 직선의 기울기 = [[2]]", "-a/2 = 2 → a = [[-4]]"])
+        c0 = R.randint(-6, 6)
+        need(c0 != c)
+        q = f"두 직선 ${lin(a1, b1, c1)} = 0$, ${lin(a2, b2, c2)} = 0$의 교점을 지나고, 직선 $y = {fx(m, c0)}$와 평행한 직선의 방정식은?"
+    return line_mc(F(m), F(c), q, "먼저 연립해서 교점을 구한 뒤 y = (기울기)x + b에 대입해요.", f"교점 ({sx}, {sy}) → b = {c}", level="어려움")
 
-# ───────── 검사: 빈 값, 보기 개수, 중복 ─────────
-for u, ps in units.items():
-    for q in ps:
-        assert q["question"] and q["answer"] not in ("", "None"), q
-        if q["type"] == "multiple_choice":
-            assert len(q["choices"]) == 5 and len(set(q["choices"])) == 5 and q["answer"] in MARKS, q
-        assert "nan" not in q["answer"] and "oo" not in q["answer"], q
 
-pages = [{"page": i + 1, "unit": unit, "problems": probs} for i, (unit, probs) in enumerate(units.items())]
-data = {"books": [{"book": TITLE, "title": TITLE, "pages": pages}]}
-OUT.parent.mkdir(parents=True, exist_ok=True)
-OUT.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
-print({u: len(ps) for u, ps in units.items()}, "총", sum(len(ps) for ps in units.values()))
+@kind(U, "두 직선과 좌표축으로 둘러싸인 도형의 넓이", 10)
+def _():
+    sx = nz(-5, 5)
+    sy = nz(-5, 5)
+    m1, m2 = nz(-3, 3), nz(-3, 3)
+    need(m1 != m2)
+    c1, c2 = sy - m1 * sx, sy - m2 * sx
+    S = F(abs(c1 - c2) * abs(sx), 2)
+    need(S > 0)
+    return P("어려움", f"두 직선 $y = {fx(m1, c1)}$, $y = {fx(m2, c2)}$와 $y$축으로 둘러싸인 삼각형의 넓이를 구하시오.", fpl(S),
+             hint="두 직선의 y절편 사이 거리를 밑변으로, 교점의 x좌표(절댓값)를 높이로 봐요.",
+             explanation=f"y절편 {c1}, {c2} → 밑변 {abs(c1 - c2)}, 교점 ({sx}, {sy}) → 높이 {abs(sx)} → 넓이 {fpl(S)}",
+             steps=[f"밑변 = [[{abs(c1 - c2)}]]", f"높이 = [[{abs(sx)}]]", f"넓이 = [[{fpl(S)}]]"])
+
+
+@kind(U, "한 점에서 만나는 세 직선", 12)
+def _():
+    sx, sy = nz(-4, 4), nz(-4, 4)
+    a1, b1, a2, b2 = (nz(-3, 3) for _ in range(4))
+    need(a1 * b2 - a2 * b1 != 0)
+    c1, c2 = -(a1 * sx + b1 * sy), -(a2 * sx + b2 * sy)
+    b3, c3 = nz(-4, 4), R.randint(-6, 6)
+    av = F(-(b3 * sy + c3), sx)
+    need(av.denominator == 1)
+    return P("어려움", f"세 직선 ${lin(a1, b1, c1)} = 0$, ${lin(a2, b2, c2)} = 0$, $ax {sgn(b3)}y {sgn(c3)} = 0$이 한 점에서 만날 때, 수 $a$의 값을 구하시오.".replace("+ 1y", "+ y").replace("- 1y", "- y").replace(" + 0 =", " ="),
+             int(av), hint="a가 없는 두 직선의 교점을 먼저 구하고, 세 번째 식에 대입해요.",
+             explanation=f"교점 ({sx}, {sy}) → ({sx})a + ({b3})×({sy}) {sgn(c3)} = 0 → a = {int(av)}", steps=[f"교점: ([[{sx}]], [[{sy}]])", f"a = [[{int(av)}]]"])
+
+
+@kind(U, "연립방정식의 해의 개수와 그래프", 14)
+def _():
+    p_, q_, r_ = nz(-4, 4), nz(-4, 4), nz(-6, 6)
+    k = nz(-3, 3, (0, 1))
+    if R.random() < 0.5:  # 해가 무수히 많다: 둘째 식 = 첫째 식 × k
+        av = q_
+        bval = r_ * k
+        # 첫째: p x + a y = r (a = q_), 둘째: (kp) x + (kq) y = b
+        combo = R.choice([("a + b", av + bval), ("ab", av * bval), ("a - b", av - bval)])
+        return P("어려움", f"연립방정식 $\\begin{{cases}} {lin(p_, 0, 0)} + ay = {r_} \\\\ {lin(k * p_, k * q_, 0)} = b \\end{{cases}}$의 해가 무수히 많을 때, 수 $a$, $b$에 대하여 ${combo[0]}$의 값을 구하시오.",
+                     combo[1], hint=f"해가 무수히 많으면 두 직선이 일치해요: 첫 식에 {k}를 곱하면 둘째 식과 같아야 해요.",
+                     explanation=f"첫 식 × {k}: {lin(k * p_, 0, 0, tex=False)} + {k}ay = {k * r_} → {k}a = {k * q_}, b = {k * r_} → a = {av}, b = {bval}",
+                     steps=[f"a = [[{av}]]", f"b = [[{bval}]]", f"{combo[0]} = [[{combo[1]}]]"])
+    av = k * p_
+    c2 = R.randint(-9, 9)
+    need(c2 != k * r_)
+    return P("어려움", f"연립방정식 $\\begin{{cases}} {lin(p_, q_, 0)} = {r_} \\\\ ax {sgn(k * q_)}y = {c2} \\end{{cases}}$의 해가 없을 때, 수 $a$의 값을 구하시오.".replace("+ 1y", "+ y").replace("- 1y", "- y"),
+             av, hint="해가 없으면 두 직선이 평행해요: x, y의 계수의 비는 같고 상수항의 비는 달라요.",
+             explanation=f"{p_} : {q_} = a : {k * q_} → a = {av} (상수항 {r_} : {c2}는 비가 달라 평행)",
+             steps=[f"a = [[{av}]]"])
+
+
+# ═════════════════════ 만들기 ═════════════════════
+
+def build():
+    by_unit: dict[str, list[list[dict]]] = {}
+    report = []
+    for unit, concept, cnt, fn in TYPES:
+        got, seen, tries = [], set(), 0
+        while len(got) < cnt and tries < cnt * 80:
+            tries += 1
+            try:
+                q = fn()
+            except (Retry, ZeroDivisionError, ValueError, IndexError, StopIteration, TypeError, KeyError):
+                continue
+            key = q["question"] + "|" + "|".join(sorted(q["choices"]))
+            if key in seen:
+                continue
+            seen.add(key)
+            q["concept"] = concept
+            for k_ in ("question", "explanation", "hint"):
+                q[k_] = fix_josa(tidy(q[k_]))
+            q["choices"] = [fix_josa(tidy(c_)) for c_ in q["choices"]]
+            q["steps"] = [fix_josa(tidy(s_)) for s_ in q["steps"]]
+            if len(set(q["choices"])) != len(q["choices"]):
+                continue
+            got.append(q)
+        report.append((unit, concept, len(got), cnt))
+        by_unit.setdefault(unit, []).append(got)
+    short = [r_ for r_ in report if r_[2] < r_[3]]
+    for unit, concept, n, cnt in short:
+        print(f"  (모자람) {unit} / {concept}: {n}/{cnt}")
+    assert all(n >= 3 for _, _, n, _ in report), [r_ for r_ in report if r_[2] < 3]
+    pages, uid = [], 0
+    for ui, (unit, lists) in enumerate(by_unit.items(), 1):
+        # 유형마다 2문제씩 한 바퀴 → 다음 바퀴 ... (앞에서부터 풀어도 모든 유형을 골고루 만남)
+        order, rnd = [], 0
+        while any(len(l_) > rnd * 2 for l_ in lists):
+            for l_ in lists:
+                order += l_[rnd * 2: rnd * 2 + 2]
+            rnd += 1
+        probs = []
+        for q in order:
+            uid += 1
+            q = {"bank_id": f"{ID_PREFIX}_{ui}_{uid:04d}", "concept": q["concept"],
+                 "type": "multiple_choice" if q["choices"] else "short_answer", **{k: q[k] for k in ("level", "question", "choices", "answer", "hint", "explanation", "steps")}}
+            probs.append(q)
+        pages.append({"page": ui, "unit": unit, "problems": probs})
+    return pages, report
+
+
+def check(pages):
+    import re
+    num = re.compile(r"^-?\d+(/\d+)?$|^x=-?\d+, y=-?\d+$")
+    errs = {}
+    for pg in pages:
+        for q in pg["problems"]:
+            blob = " ".join([q["question"], q["explanation"]] + q["choices"] + q["steps"])
+            probs = []
+            if not (q["question"] and q["answer"]):
+                probs.append("빈 값")
+            if q["type"] == "multiple_choice":
+                if not (len(q["choices"]) == 5 and len(set(q["choices"])) == 5 and q["answer"] in MARKS):
+                    probs.append("보기")
+            elif not num.match(q["answer"]):
+                probs.append("답 꼴")
+            if any(s_.count("[[") != s_.count("]]") for s_ in q["steps"]):
+                probs.append("빈칸")
+            if "None" in blob or q["question"].count("$") % 2 or any(c_.count("$") % 2 for c_ in q["choices"]):
+                probs.append("None/$")
+            for bad in ("^{1}", "+ -", "- -", "+ +", "= +"):
+                if bad in blob:
+                    probs.append(bad)
+            if re.search(r"(?<![\d./])1[xyab](?![\w^])", blob):
+                probs.append("1x")
+            if re.search(r"(?<![\d.])-1\(", blob):
+                probs.append("-1(")
+            for p_ in probs:
+                errs.setdefault((q["concept"], p_), []).append(blob[:200])
+    for (c_, p_), ex in errs.items():
+        print(f"  [검사] {c_} / {p_}: {len(ex)}개 예) {ex[0]}")
+    return errs
+
+
+if __name__ == "__main__":
+    pages, report = build()
+    errs = check(pages)
+    assert not errs, f"검사 실패 {len(errs)}종"
+    data = {"books": [{"book": TITLE, "title": TITLE, "pages": pages}]}
+    OUT.parent.mkdir(parents=True, exist_ok=True)
+    OUT.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    for pg in pages:
+        n_types = sum(1 for u, *_ in report if u == pg["unit"])
+        print(f"{pg['unit']}: 유형 {n_types}개, 문제 {len(pg['problems'])}개")
+    print("총", sum(len(pg["problems"]) for pg in pages), "문제,", len(report), "유형")

@@ -14,7 +14,8 @@ class SeedAssetsTest {
         assertEquals(7, decks.size)
         assertTrue(decks.all { it.name.endsWith(" · 유형 씨앗 2-1") })
         val seeds = decks.flatMap { it.seeds }
-        assertTrue("씨앗 수 ${seeds.size}", seeds.size >= 150)
+        assertTrue("씨앗 수 ${seeds.size}", seeds.size >= 1000)
+        assertTrue(seeds.all { it.sourceId.startsWith("t21_") })
         assertEquals(seeds.size, seeds.map { it.sourceId }.toSet().size)
         for (w in seeds) {
             assertTrue("목록 글자에 수식 기호: ${w.text}", '\\' !in w.text && '$' !in w.text)
