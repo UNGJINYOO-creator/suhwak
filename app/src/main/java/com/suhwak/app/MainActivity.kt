@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -295,7 +295,8 @@ private fun AppContent() {
 @androidx.compose.runtime.Composable
 private fun androidx.compose.foundation.layout.RowScope.HarvestButton(onClick: () -> Unit) {
     androidx.compose.foundation.layout.Box(
-        Modifier.weight(1f).fillMaxHeight(),
+        // 높이를 정해 둔다: fillMaxHeight를 쓰면 탭 줄이 화면 전체로 늘어나 홈이 안 보인다.
+        Modifier.weight(1f).height(80.dp),
         contentAlignment = androidx.compose.ui.Alignment.Center,
     ) {
         androidx.compose.foundation.layout.Column(

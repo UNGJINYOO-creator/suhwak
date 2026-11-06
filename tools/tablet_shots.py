@@ -79,28 +79,15 @@ if tap("Lv."):
     shot("06-level-dialog")
 
 restart()
-if tap("오늘의 낚시"):
-    shot("07-fishing-guide")
-    tap("건너뛰기", tries=1)
-    shot("08-fishing")
-    scroll(); shot("08b-fishing-scrolled")
-    if tap("📖 도감"):
-        shot("09-fishbook")
+if tap("오늘의 수확 시작") or tap("수확", exact=True):
+    time.sleep(3)
+    shot("13-solve")
+    scroll(); shot("14-solve-scrolled")
 
 restart()
-if tap("대양 원정"):
-    shot("10-voyage-guide")
-    tap("건너뛰기", tries=1)
-    shot("11-voyage")
-    scroll(); shot("12-voyage-scrolled")
-
-restart()
-if tap("오늘 학습 시작"):
-    time.sleep(2)
-    shot("13-study")
-    w, h = screen()
-    adb("shell", "input", "tap", str(w // 2), str(h // 2))
-    shot("14-study-flip")
+if tap("과수원 진도"):
+    pass
+tap("오답노트", exact=True); shot("15-wrongnote")
 
 restart()
 tap("복습·통계"); shot("16-review"); scroll(); shot("17-review-scrolled")
