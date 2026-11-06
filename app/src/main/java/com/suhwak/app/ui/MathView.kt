@@ -84,27 +84,37 @@ private fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replac
 /** 문장 속 분수가 작게 보이지 않게 \frac -> \dfrac. */
 private fun big(s: String) = s.replace("\\frac", "\\dfrac")
 
+/** 보기가 모두 짧으면(수식 기호를 빼고 14자 이하, 분수·연립 없음) 두 줄로 크게 놓는다. */
+private fun shortChoices(choices: List<String>): Boolean = choices.isNotEmpty() && choices.all { c ->
+    "\\begin" !in c && "\\frac" !in c && c.replace(Regex("""\\[a-zA-Z]+|[${'$'}{}\s]"""), "").length <= 14
+}
+
 private fun page(question: String, choices: List<String>): String {
+    val grid = shortChoices(choices)
     val buttons = choices.mapIndexed { i, c ->
-        """<button class="c" id="c${i + 1}" onclick="if(!L)Bridge.pick(${i + 1})"><span class="mk">${MARKS.getOrElse(i) { '•' }}</span><span class="ct">${esc(big(c))}</span></button>"""
+        val wide = grid && choices.size % 2 == 1 && i == choices.lastIndex
+        """<button class="c${if (wide) " w" else ""}" id="c${i + 1}" onclick="if(!L)Bridge.pick(${i + 1})"><span class="mk">${MARKS.getOrElse(i) { '•' }}</span><span class="ct">${esc(big(c))}</span></button>"""
     }.joinToString("")
     return """<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <link rel="stylesheet" href="katex.min.css">
 <script src="katex.min.js"></script><script src="auto-render.min.js"></script>
 <style>
-html,body{margin:0;padding:0;background:transparent;color:#2B3A4F;font-family:sans-serif;-webkit-user-select:none;user-select:none}
-.q{font-size:20px;line-height:1.75;word-break:keep-all;padding:2px 2px 10px}
+html,body{margin:0;padding:0;background:transparent;color:#222B18;font-family:sans-serif;-webkit-user-select:none;user-select:none}
+.q{font-size:21px;line-height:1.75;word-break:keep-all;padding:18px 18px 20px;margin:0 0 12px;background:#2F4419;color:#fff;border-radius:22px}
 .q .katex{font-size:1.1em}
-.cs{display:flex;flex-direction:column;gap:8px}
-.c{display:flex;gap:12px;align-items:center;text-align:left;background:#fff;border:1.5px solid #E1EAF4;border-radius:14px;padding:10px 14px;font-size:18px;min-height:52px;color:#2B3A4F;font-family:inherit;width:100%}
-.c .mk{font-size:20px;color:#8A97AB}
-.c.on{background:#E3F0FF;border-color:#3A7BD5}.c.on .mk{color:#2F5FA8;font-weight:700}
-.c.ans{background:#E2F5EF;border-color:#3FA79C}.c.ans .mk{color:#2B6B5F;font-weight:700}
-.c.bad{background:#FDECEC;border-color:#E5534B}
+.cs{display:flex;flex-direction:column;gap:9px}
+.cs.g{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.c{display:flex;gap:12px;align-items:center;text-align:left;background:#fff;border:3px solid #fff;border-radius:18px;padding:10px 14px;font-size:18px;min-height:56px;color:#222B18;font-family:inherit;width:100%;box-sizing:border-box}
+.g .c{justify-content:center;min-height:64px;font-size:20px}
+.g .c.w{grid-column:span 2}
+.c .mk{font-size:17px;color:#5A6448}
+.c.on{background:#DCE6C4;border-color:#4B6B2A}.c.on .mk{color:#2F4419;font-weight:700}
+.c.ans{background:#FBE3D5;border-color:#D9622B}.c.ans .mk{color:#A9481B;font-weight:700}
+.c.bad{background:#FDECEC;border-color:#C8372D}
 </style></head><body>
 ${if (question.isBlank()) "" else "<div class=\"q\" id=\"q\">" + esc(big(question)) + "</div>"}
-<div class="cs">$buttons</div>
+<div class="cs${if (grid) " g" else ""}">$buttons</div>
 <script>
 var L=0;
 function S(sel,ans,locked){L=locked;

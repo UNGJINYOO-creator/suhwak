@@ -1,5 +1,6 @@
 package com.suhwak.app.ui
 
+import com.suhwak.app.ui.theme.Sea
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -136,34 +137,26 @@ fun SolveQuiz(
     }
 
     val header: @Composable () -> Unit = {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "📒 $label",
-                color = Color(0xFF6B3A10),
-                fontWeight = FontWeight.Bold,
-                fontSize = 16.sp,
-                modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(Color(0xFFFFF3D6)).padding(horizontal = 8.dp, vertical = 3.dp),
-            )
-            if (badge != null) Tag(badge, Color(0xFFFFE9D6), Color(0xFF8A4B12))
-            if (word.pos.isNotBlank()) Tag(word.pos, Color(0xFFE2F5EF), Color(0xFF24493F))
-            if (word.level.isNotBlank()) Tag(word.level, Color(0xFFF2F9FC), Color(0xFF56657C))
-            Spacer(Modifier.weight(1f))
-            Text(
-                when (stage) {
-                    0 -> "1차"
-                    1 -> "2차 · 힌트"
-                    2 -> "3차 · 빈칸 풀이"
-                    else -> if (tries == 4) "📖 풀이 보고 이해" else "⭕ ${tries}차 정답"
-                },
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-            )
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "📒 $label",
+                    color = Sea.Deep,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).background(Sea.MintCard).padding(horizontal = 10.dp, vertical = 4.dp),
+                )
+                if (badge != null) Tag(badge, Sea.FruitSoft, Sea.FruitText)
+                if (word.level.isNotBlank()) Tag(word.level, Color.White, Sea.Soft)
+            }
+            if (word.pos.isNotBlank()) Text(word.pos, style = MaterialTheme.typography.titleMedium, color = Sea.Accent)
+            StageChips(stage, tries)
         }
     }
 
     val feedback: @Composable () -> Unit = {
         when (stage) {
-            1 -> Note("💡 힌트", word.hint.ifBlank { "문제를 다시 읽어 봐요" }, Color(0xFFE6F2FF), Color(0xFF24456F))
+            1 -> Note("💡 힌트", word.hint.ifBlank { "문제를 다시 읽어 봐요" }, Color(0xFFE3EAD2), Color(0xFF2F4419))
             2 -> {
                 if (!explained) {
                     Note(
@@ -175,10 +168,10 @@ fun SolveQuiz(
                 if (retryWrong) Note("❌ 아직 아니에요", if (explained) "풀이의 정답을 다시 보고 그대로 써 봐요." else "빈칸 풀이를 다시 보고, 공책에 다시 풀어 봐요.", Color(0xFFFDECEC), Color(0xFF8A2E2A))
             }
             3 -> when (tries) {
-                1 -> Note("⭕ 정답!", word.example, Color(0xFFE2F5EF), Color(0xFF24493F))
-                2 -> Note("⭕ 정답! (힌트)", word.example, Color(0xFFE2F5EF), Color(0xFF24493F))
-                3 -> Note("⭕ 이해 완료!", word.example, Color(0xFFE2F5EF), Color(0xFF24493F))
-                else -> Note("📖 풀이를 보고 이해했어요", "같은 유형 문제로 한 번 더 연습해요.", Color(0xFFE2F5EF), Color(0xFF24493F))
+                1 -> Note("⭕ 정답!", word.example, Color(0xFFDCE6C4), Color(0xFF2F4419))
+                2 -> Note("⭕ 정답! (힌트)", word.example, Color(0xFFDCE6C4), Color(0xFF2F4419))
+                3 -> Note("⭕ 이해 완료!", word.example, Color(0xFFDCE6C4), Color(0xFF2F4419))
+                else -> Note("📖 풀이를 보고 이해했어요", "같은 유형 문제로 한 번 더 연습해요.", Color(0xFFDCE6C4), Color(0xFF2F4419))
             }
         }
     }
@@ -229,14 +222,14 @@ fun SolveQuiz(
             Button(
                 onClick = { tryHarvest() },
                 enabled = canAnswer && response.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth().height(56.dp),
-                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth().height(60.dp),
+                shape = RoundedCornerShape(18.dp),
             ) {
-                Text(if (stage == 2 && !clozeDone) "빈칸을 먼저 채워요" else "채점하기", fontSize = 19.sp, fontWeight = FontWeight.Bold)
+Text(if (stage == 2 && !clozeDone) "빈칸을 먼저 채워요" else "🍎 수확하기 (채점)", style = MaterialTheme.typography.titleLarge.copy(fontSize = 21.sp))
             }
         } else {
-            Button(onClick = onNext, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(16.dp)) {
-                Text("다음 문제", fontSize = 19.sp, fontWeight = FontWeight.Bold)
+            Button(onClick = onNext, modifier = Modifier.fillMaxWidth().height(60.dp), shape = RoundedCornerShape(18.dp)) {
+                Text("다음 문제", style = MaterialTheme.typography.titleLarge.copy(fontSize = 21.sp))
             }
         }
     }
@@ -319,11 +312,11 @@ private fun MathKeypad(value: String, enabled: Boolean, onChange: (String) -> Un
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Box(
             Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(14.dp)).background(Color.White)
-                .border(1.5.dp, Color(0xFFE1EAF4), RoundedCornerShape(14.dp)).padding(horizontal = 16.dp),
+                .border(1.5.dp, Color(0xFFD3DCBE), RoundedCornerShape(14.dp)).padding(horizontal = 16.dp),
             contentAlignment = Alignment.CenterStart,
         ) {
-            if (value.isEmpty()) Text("답 (예: 3/8, x=4)", color = Color(0xFF8A97AB), maxLines = 1)
-            else Text(value, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2B3A4F), maxLines = 1)
+            if (value.isEmpty()) Text("답 (예: 3/8, x=4)", color = Color(0xFF6B7558), maxLines = 1)
+            else Text(value, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color(0xFF222B18), maxLines = 1)
         }
         rows.forEach { row ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -347,6 +340,29 @@ private fun MathKeypad(value: String, enabled: Boolean, onChange: (String) -> Un
                         Text(key, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
                     }
                 }
+            }
+        }
+    }
+}
+
+/** 1차(씨앗) → 2차 힌트(새싹) → 3차 빈칸(열매): 지금 단계는 짙은 녹색, 맞히면 주황 '⭕ n차 정답'. */
+@Composable
+private fun StageChips(stage: Int, tries: Int) {
+    val names = listOf("🌰 1차", "🌱 2차 힌트", "🍎 3차 빈칸")
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        names.forEachIndexed { i, name ->
+            val now = stage == i
+            val done = stage == 3 && (if (tries == 4) i == 2 else i == tries - 1)
+            val bg = when { done -> Sea.FruitSoft; now -> Sea.Deep; else -> Sea.Empty }
+            val fg = when { done -> Sea.FruitText; now -> Color.White; else -> Sea.Soft }
+            Box(
+                Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(bg).padding(vertical = 8.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                FitText(
+                    if (done) (if (tries == 4) "📖 풀이 보고 이해" else "⭕ ${tries}차 정답") else name,
+                    MaterialTheme.typography.labelLarge.copy(color = fg, fontWeight = if (now || done) FontWeight.Bold else FontWeight.Normal),
+                )
             }
         }
     }
@@ -385,7 +401,7 @@ private fun ClozeSolve(steps: List<String>, explanation: String, done: Boolean, 
     val need = remember(steps) { cloze.answers.indices.filter { mustType(cloze.answers[it]) }.toSet() }
     if (need.isEmpty()) {
         androidx.compose.runtime.LaunchedEffect(steps) { onDone() }
-        Note("풀이", (cloze.solution.takeIf { steps.isNotEmpty() } ?: listOf(explanation)).joinToString("\n"), Color(0xFFF2F9FC), Color(0xFF2B3A4F))
+        Note("풀이", (cloze.solution.takeIf { steps.isNotEmpty() } ?: listOf(explanation)).joinToString("\n"), Color(0xFFEEF2E2), Color(0xFF222B18))
         return
     }
     val typed = remember(steps) { mutableStateListOf(*Array(cloze.answers.size) { "" }) }
@@ -393,10 +409,10 @@ private fun ClozeSolve(steps: List<String>, explanation: String, done: Boolean, 
     val wrong = remember(steps) { mutableStateListOf(*Array(cloze.answers.size) { false }) }
     var missedOnce by remember(steps) { mutableStateOf(false) }
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xFFF7FAFC)).padding(14.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xFFF6F8EF)).padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text("빈칸 풀이", fontWeight = FontWeight.Bold, color = Color(0xFF2B3A4F))
+        Text("빈칸 풀이", fontWeight = FontWeight.Bold, color = Color(0xFF222B18))
         cloze.lines.forEach { pieces ->
             FlowRow(verticalArrangement = Arrangement.Center, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 pieces.forEach { piece ->
@@ -407,9 +423,9 @@ private fun ClozeSolve(steps: List<String>, explanation: String, done: Boolean, 
                         if (locked[i]) {
                             Text(
                                 if (i in need) typed[i] else cloze.answers[i],
-                                color = Color(0xFF2B6B5F), fontWeight = FontWeight.Bold, fontSize = 18.sp,
+                                color = Color(0xFF4B6B2A), fontWeight = FontWeight.Bold, fontSize = 18.sp,
                                 modifier = Modifier.align(Alignment.CenterVertically).clip(RoundedCornerShape(6.dp))
-                                    .background(Color(0xFFE2F5EF)).padding(horizontal = 6.dp, vertical = 2.dp),
+                                    .background(Color(0xFFDCE6C4)).padding(horizontal = 6.dp, vertical = 2.dp),
                             )
                         } else {
                             OutlinedTextField(
@@ -446,7 +462,7 @@ private fun ClozeSolve(steps: List<String>, explanation: String, done: Boolean, 
                 }
             }
         } else {
-            Text("빈칸을 다 채웠어요 👍", fontWeight = FontWeight.Bold, color = Color(0xFF2B6B5F))
+            Text("빈칸을 다 채웠어요 👍", fontWeight = FontWeight.Bold, color = Color(0xFF4B6B2A))
         }
     }
 }
@@ -466,13 +482,13 @@ private fun DetailedSolution(word: Word, steps: List<String>, choices: List<Stri
     ) {
         Text("📖 자세한 풀이", fontWeight = FontWeight.Bold, fontSize = 19.sp, color = Color(0xFF6B3A10))
         if (word.hint.isNotBlank()) {
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFFE6F2FF)).padding(12.dp)) {
-                Text("📌 이 유형의 핵심", fontWeight = FontWeight.Bold, color = Color(0xFF24456F))
-                Text(word.hint, color = Color(0xFF24456F), style = MaterialTheme.typography.bodyMedium)
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFFE3EAD2)).padding(12.dp)) {
+                Text("📌 이 유형의 핵심", fontWeight = FontWeight.Bold, color = Color(0xFF2F4419))
+                Text(word.hint, color = Color(0xFF2F4419), style = MaterialTheme.typography.bodyMedium)
             }
         }
         if (cloze.lines.isNotEmpty()) {
-            Text("풀이 순서", fontWeight = FontWeight.Bold, color = Color(0xFF2B3A4F))
+            Text("풀이 순서", fontWeight = FontWeight.Bold, color = Color(0xFF222B18))
             var n = 0
             cloze.lines.forEach { pieces ->
                 // 보기 판단 줄(①…⑤로 시작)이나 그림 글자로 시작하는 줄은 번호 없이, 풀이 줄은 1 2 3 … 번호를 붙인다
@@ -491,7 +507,7 @@ private fun DetailedSolution(word: Word, steps: List<String>, choices: List<Stri
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                         pieces.forEach { piece ->
                             if (piece.blankIndex < 0) {
-                                Text(piece.text, fontSize = 18.sp, color = Color(0xFF2B3A4F))
+                                Text(piece.text, fontSize = 18.sp, color = Color(0xFF222B18))
                             } else {
                                 Text(
                                     cloze.answers[piece.blankIndex],
@@ -507,10 +523,10 @@ private fun DetailedSolution(word: Word, steps: List<String>, choices: List<Stri
         val answerText = if (word.qtype == "mc" && answerIndex > 0) {
             word.meaning + "  " + MathText.plain(choices.getOrElse(answerIndex - 1) { "" })
         } else word.meaning
-        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFFE2F5EF)).padding(12.dp)) {
-            Text("✅ 정답", fontWeight = FontWeight.Bold, color = Color(0xFF24493F))
-            Text(answerText, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF24493F))
-            if (word.example.isNotBlank()) Text(word.example, color = Color(0xFF24493F), style = MaterialTheme.typography.bodyMedium)
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFFDCE6C4)).padding(12.dp)) {
+            Text("✅ 정답", fontWeight = FontWeight.Bold, color = Color(0xFF2F4419))
+            Text(answerText, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2F4419))
+            if (word.example.isNotBlank()) Text(word.example, color = Color(0xFF2F4419), style = MaterialTheme.typography.bodyMedium)
         }
         Text("✍️ 공책에 풀이를 순서대로 옮겨 적고, 답을 직접 써서 내요.", color = Color(0xFF6B3A10), fontWeight = FontWeight.Bold)
     }

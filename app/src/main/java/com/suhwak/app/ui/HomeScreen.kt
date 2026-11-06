@@ -14,6 +14,10 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.runtime.key
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.width
+import com.suhwak.app.ui.theme.Sea
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
@@ -130,8 +134,8 @@ import java.io.File
 /** Cover colours for the deck tiles. */
 /** Pastel cover colours for the deck tiles (dark text on top). */
 val DeckColors = listOf(
-    Color(0xFFD6E8FF), Color(0xFFFDE1DF), Color(0xFFD8F2E8), Color(0xFFFFEFC9),
-    Color(0xFFE8E1FF), Color(0xFFD5F1F4), Color(0xFFFFE3D2), Color(0xFFE4E9F0),
+    Color(0xFFDCE6C4), Color(0xFFFBE3D5), Color(0xFFE3EAD2), Color(0xFFF6E7B8),
+    Color(0xFFD5E4D0), Color(0xFFEDE3CF), Color(0xFFFFE3D2), Color(0xFFE6EBDD),
 )
 
 val DeckEmojis = listOf("📘", "📗", "📙", "📕", "⭐", "🏃", "🍎", "🌏", "✏️", "🎯", "🐶", "🚀")
@@ -181,6 +185,10 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var wrongCount by mutableIntStateOf(0)
         private set
+    /** 오늘 다시 볼 유형 수 (쌍둥이에서도 틀린 유형). */
+    var weakDue by mutableIntStateOf(0)
+        private set
+    private val weakTypes = com.suhwak.app.data.WeakTypes(app)
     private val fishing = com.suhwak.app.data.Fishing(app)
     /** What the 단어 낚시 도전 card says today. */
     var fishLine by mutableStateOf("")
@@ -215,6 +223,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         totalMs = stats.totalStudyMs
         totalLearned = stats.totalLearned
         wrongCount = wrongNote.ids.size
+        weakDue = weakTypes.dueToday().size
         val timeLeft = settings.dailyGoalMinutes > 0 && stats.studyMs < settings.dailyGoalMinutes * 60_000L
         val wordsLeft = settings.dailyGoalMinutes <= 0 && settings.dailyWords > 0 && stats.learnedCount < settings.dailyWords
         fishOpen = !timeLeft && !wordsLeft && fishing.triesLeft > 0
@@ -499,92 +508,35 @@ fun HomeScreen(
         ) {
             // The header scrolls with the cards, so the first card can ride over its bottom without a cut edge.
             item(key = "top", span = { GridItemSpan(maxLineSpan) }) {
-                HomeHeader(
-                    vm.level, vm.known, vm.total, vm.stars, vm.totalMs,
-                    Modifier.layout { measurable, constraints ->
-                        val side = 16.dp.roundToPx()
-                        val overlap = (4 + 10).dp.roundToPx()
-                        val width = constraints.maxWidth + side * 2
-                        val p = measurable.measure(constraints.copy(minWidth = width, maxWidth = width))
-                        // Full screen width past the grid padding; the next card just touches the wave.
-                        layout(constraints.maxWidth, p.height - overlap) { p.place(-side, 0) }
-                    },
-                )
+                HomeHeader(vm.level, vm.known, vm.total, vm.stars, vm.totalMs)
             }
             item(key = "today", span = { GridItemSpan(maxLineSpan) }) {
                 TodayCard(dueCount, minOf(newCount, StudyViewModel.newPerDay(vm.settings)), vm.todayMs, vm.goalMs, vm.streak, vm.stars, vm.level, vm.known, vm.total, vm.learned, vm.goalWords, vm.totalMs, vm.totalLearned, onToday)
             }
-            // The day's fishing and the giant hunt side by side; each opens its own screen.
-            item(key = "fishing", span = { GridItemSpan(maxLineSpan) }) {
-                Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Card(
-                        onClick = { onFishing(false) },
-                        shape = MaterialTheme.shapes.large,
-                        colors = CardDefaults.cardColors(containerColor = if (vm.fishOpen) com.suhwak.app.ui.theme.Sea.MintCardOpen else com.suhwak.app.ui.theme.Sea.MintCard),
-                        modifier = Modifier.weight(1f).fillMaxHeight(),
-                    ) {
-                        val ink = com.suhwak.app.ui.theme.Sea.Ink
-                        Column(Modifier.padding(14.dp)) {
-                            Text("🧺", fontSize = 26.sp)
-                            FitText("오늘의 수확", MaterialTheme.typography.titleMedium.copy(color = ink, fontWeight = FontWeight.Bold), align = TextAlign.Start)
-                            Text(vm.fishLine, style = MaterialTheme.typography.bodySmall, color = ink, modifier = Modifier.padding(top = 4.dp))
-                        }
-                    }
-                    vm.giant?.let { g ->
-                        val f = g.fish
+            // 다시 볼 유형 · 오답노트: 작은 버튼 두 개
+            if (vm.wrongCount > 0 || vm.weakDue > 0) {
+                item(key = "chips", span = { GridItemSpan(maxLineSpan) }) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Card(
-                            onClick = { onFishing(true) },
-                            shape = MaterialTheme.shapes.large,
-                            colors = CardDefaults.cardColors(containerColor = com.suhwak.app.ui.theme.Sea.Lavender),
-                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                            onClick = onToday,
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(containerColor = Sea.MintCard),
+                            modifier = Modifier.weight(1f).heightIn(min = 52.dp),
                         ) {
-                            Column(Modifier.padding(14.dp)) {
-                                Text("⛵", fontSize = 26.sp)
-                                FitText("대양 원정", MaterialTheme.typography.titleMedium.copy(color = com.suhwak.app.ui.theme.Sea.Ink, fontWeight = FontWeight.Bold), align = TextAlign.Start)
-                                if (f == null) {
-                                    Text("18개 완성! 🏆", style = MaterialTheme.typography.bodySmall, color = com.suhwak.app.ui.theme.Sea.Ink)
-                                } else {
-                                    FitText("${f.ocean.title} · ${f.emoji} ${f.name}", MaterialTheme.typography.bodySmall.copy(color = com.suhwak.app.ui.theme.Sea.Soft), align = TextAlign.Start)
-                                    Spacer(Modifier.height(6.dp))
-                                    ThickProgress(g.hit / g.total.coerceAtLeast(1).toFloat(), Modifier.fillMaxWidth())
-                                    Text(
-                                        when {
-                                            g.ready -> "100칸 완성! 최종전 🏆"
-                                            g.pending > 0 -> "${g.hit}/${g.total}칸 · 오늘 +${g.pending}"
-                                            else -> "${g.hit}/${g.total}칸"
-                                        },
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = if (g.ready || g.pending > 0) com.suhwak.app.ui.theme.Sea.Warm else com.suhwak.app.ui.theme.Sea.Soft,
-                                        modifier = Modifier.padding(top = 4.dp),
-                                    )
-                                }
+                            Box(Modifier.fillMaxWidth().heightIn(min = 52.dp), contentAlignment = Alignment.Center) {
+                                FitText("🔁 다시 볼 유형 ${vm.weakDue}", MaterialTheme.typography.titleSmall.copy(color = Sea.Deep))
                             }
                         }
-                    }
-                }
-            }
-            if (vm.wrongCount > 0) {
-                item(key = "wrong", span = { GridItemSpan(maxLineSpan) }) {
-                    Card(
-                        onClick = onWrongNote,
-                        shape = MaterialTheme.shapes.large,
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFE0D6)),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("🔥", fontSize = 28.sp)
-                            Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                                Text("오답노트 ${vm.wrongCount}개", style = MaterialTheme.typography.titleMedium, color = Color(0xFF8A2A0A))
-                                Text(
-                                    "2번 틀린 문제가 모여요 · 3번 연속 맞히면 빠져요",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color(0xFF8A2A0A),
-                                )
+                        Card(
+                            onClick = onWrongNote,
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(containerColor = Sea.MintCard),
+                            modifier = Modifier.weight(1f).heightIn(min = 52.dp),
+                        ) {
+                            Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                FitText("📒 오답노트 ${vm.wrongCount}", MaterialTheme.typography.titleSmall.copy(color = Sea.Deep), Modifier.weight(1f), align = TextAlign.Start)
+                                TextButton(onClick = onWrongList) { Text("목록", color = Sea.Deep) }
                             }
-                            TextButton(onClick = onWrongList) {
-                                Text("목록", style = MaterialTheme.typography.labelLarge, color = Color(0xFF8A2A0A))
-                            }
-                            Text("학습 ›", style = MaterialTheme.typography.labelLarge, color = Color(0xFF8A2A0A), fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -610,46 +562,106 @@ fun HomeScreen(
                     }
                 }
             } else {
-                item(key = "header", span = { GridItemSpan(maxLineSpan) }) {
-                    Row(Modifier.padding(start = 4.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            if (selecting) "합칠 문제집을 눌러서 골라요" else "문제집 ${decks.size}개",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = if (selecting) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (!selecting && decks.size >= 2) {
-                            TextButton(onClick = { guard { selecting = true } }) { Text("합치기") }
-                        }
-                        Box {
-                            TextButton(onClick = { sortOpen = true }) { Text("${sort.label} ▾") }
-                            DropdownMenu(expanded = sortOpen, onDismissRequest = { sortOpen = false }) {
-                                DeckSort.entries.forEach { s ->
-                                    DropdownMenuItem(text = { Text(s.label) }, onClick = { sortOpen = false; vm.setSort(s) })
+                // 과수원 진도: 문제집마다 밭고랑 한 줄 (12칸 중 익힌 만큼 녹색)
+                item(key = "orchard", span = { GridItemSpan(maxLineSpan) }) {
+                    Card(
+                        shape = RoundedCornerShape(22.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(Modifier.padding(start = 16.dp, end = 6.dp, top = 8.dp, bottom = 8.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    if (selecting) "합칠 문제집을 눌러서 골라요" else "과수원 진도",
+                                    style = if (selecting) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleLarge,
+                                    color = if (selecting) MaterialTheme.colorScheme.primary else Sea.Deep,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                if (!selecting && decks.size >= 2) {
+                                    TextButton(onClick = { guard { selecting = true } }) { Text("합치기") }
+                                }
+                                Box {
+                                    TextButton(onClick = { sortOpen = true }) { Text("${sort.label} ▾") }
+                                    DropdownMenu(expanded = sortOpen, onDismissRequest = { sortOpen = false }) {
+                                        DeckSort.entries.forEach { s ->
+                                            DropdownMenuItem(text = { Text(s.label) }, onClick = { sortOpen = false; vm.setSort(s) })
+                                        }
+                                    }
+                                }
+                            }
+                            decks.forEach { deck ->
+                                key(deck.id) {
+                                    DeckTile(
+                                        deck = deck,
+                                        onOpen = { onOpenDeck(deck.id) },
+                                        onStudy = { onStudyDeck(deck.id) },
+                                        onRename = { guard { deckToRename = deck } },
+                                        onStyle = { guard { deckToStyle = deck } },
+                                        onLink = { guard { deckToLink = deck } },
+                                        collectionName = collections.firstOrNull { it.id == deck.collectionId }?.name,
+                                        onDelete = { deckToDelete = deck },
+                                        onMerge = if (decks.size >= 2) ({ guard { selecting = true; if (deck.id !in selected) selected += deck.id } }) else null,
+                                        selecting = selecting,
+                                        selected = deck.id in selected,
+                                        onToggle = { if (deck.id in selected) selected -= deck.id else selected += deck.id },
+                                    )
                                 }
                             }
                         }
                     }
                 }
-                items(decks, key = { it.id }) { deck ->
-                    DeckTile(
-                        deck = deck,
-                        onOpen = { onOpenDeck(deck.id) },
-                        onStudy = { onStudyDeck(deck.id) },
-                        onRename = { guard { deckToRename = deck } },
-                        onStyle = { guard { deckToStyle = deck } },
-                        onLink = { guard { deckToLink = deck } },
-                        collectionName = collections.firstOrNull { it.id == deck.collectionId }?.name,
-                        onDelete = { deckToDelete = deck },
-                        onMerge = if (decks.size >= 2) ({ guard { selecting = true; if (deck.id !in selected) selected += deck.id } }) else null,
-                        selecting = selecting,
-                        selected = deck.id in selected,
-                        onToggle = { if (deck.id in selected) selected -= deck.id else selected += deck.id },
-                    )
+                // The day's fishing and the giant hunt side by side; each opens its own screen.
+                item(key = "fishing", span = { GridItemSpan(maxLineSpan) }) {
+                    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Card(
+                            onClick = { onFishing(false) },
+                            shape = MaterialTheme.shapes.large,
+                            colors = CardDefaults.cardColors(containerColor = if (vm.fishOpen) com.suhwak.app.ui.theme.Sea.MintCardOpen else com.suhwak.app.ui.theme.Sea.MintCard),
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                        ) {
+                            val ink = com.suhwak.app.ui.theme.Sea.Ink
+                            Column(Modifier.padding(14.dp)) {
+                                Text("🧺", fontSize = 26.sp)
+                                FitText("오늘의 수확", MaterialTheme.typography.titleMedium.copy(color = ink, fontWeight = FontWeight.Bold), align = TextAlign.Start)
+                                Text(vm.fishLine, style = MaterialTheme.typography.bodySmall, color = ink, modifier = Modifier.padding(top = 4.dp))
+                            }
+                        }
+                        vm.giant?.let { g ->
+                            val f = g.fish
+                            Card(
+                                onClick = { onFishing(true) },
+                                shape = MaterialTheme.shapes.large,
+                                colors = CardDefaults.cardColors(containerColor = com.suhwak.app.ui.theme.Sea.Lavender),
+                                modifier = Modifier.weight(1f).fillMaxHeight(),
+                            ) {
+                                Column(Modifier.padding(14.dp)) {
+                                    Text("⛵", fontSize = 26.sp)
+                                    FitText("대양 원정", MaterialTheme.typography.titleMedium.copy(color = com.suhwak.app.ui.theme.Sea.Ink, fontWeight = FontWeight.Bold), align = TextAlign.Start)
+                                    if (f == null) {
+                                        Text("18개 완성! 🏆", style = MaterialTheme.typography.bodySmall, color = com.suhwak.app.ui.theme.Sea.Ink)
+                                    } else {
+                                        FitText("${f.ocean.title} · ${f.emoji} ${f.name}", MaterialTheme.typography.bodySmall.copy(color = com.suhwak.app.ui.theme.Sea.Soft), align = TextAlign.Start)
+                                        Spacer(Modifier.height(6.dp))
+                                        ThickProgress(g.hit / g.total.coerceAtLeast(1).toFloat(), Modifier.fillMaxWidth())
+                                        Text(
+                                            when {
+                                                g.ready -> "100칸 완성! 최종전 🏆"
+                                                g.pending > 0 -> "${g.hit}/${g.total}칸 · 오늘 +${g.pending}"
+                                                else -> "${g.hit}/${g.total}칸"
+                                            },
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = if (g.ready || g.pending > 0) com.suhwak.app.ui.theme.Sea.Warm else com.suhwak.app.ui.theme.Sea.Soft,
+                                            modifier = Modifier.padding(top = 4.dp),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
                 item(key = "hint", span = { GridItemSpan(maxLineSpan) }) {
                     Text(
-                        "문제집을 누르면 바로 학습해요 · 목록은 오른쪽 위 '목록' · 길게 누르면 이름·표지 바꾸기, 합치기, 삭제",
+                        "줄을 누르면 바로 학습해요 · 문제 보기는 '목록' · 길게 누르면 이름·표지 바꾸기, 합치기, 삭제",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.outline,
                         modifier = Modifier.padding(top = 4.dp, start = 4.dp),
@@ -817,66 +829,52 @@ fun SheetItem(icon: ImageVector, title: String, desc: String, onClick: () -> Uni
     )
 }
 
-/** Pastel sea header with a wavy bottom edge: the app name, a greeting, today's progress pill (starts 오늘 학습) and the picture in a frame on the right. */
+/** 과수원 머리: 레벨과 인사(누르면 레벨 설명), 오른쪽에 모은 열매. */
 @Composable
 private fun HomeHeader(level: Int, known: Int, total: Int, stars: Int, totalMs: Long, modifier: Modifier = Modifier) {
     var showLevels by remember { mutableStateOf(false) }
     if (showLevels) LevelDialog(level, known, total, stars, totalMs) { showLevels = false }
-    Box(
-        modifier
-            .fillMaxWidth()
-            .background(
-                Brush.linearGradient(com.suhwak.app.ui.theme.Sea.Sky),
-                WaveBottomShape(),
-            )
-            .statusBarsPadding()
-            .padding(start = 20.dp, end = 16.dp, top = 12.dp, bottom = 30.dp),
+    Row(
+        modifier.fillMaxWidth().statusBarsPadding().padding(start = 4.dp, top = 18.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.align(Alignment.TopStart).padding(top = 6.dp)) {
-            Text(
-                buildAnnotatedString {
-                    append("수확")
-                    withStyle(SpanStyle(color = com.suhwak.app.ui.theme.Sea.Mint)) { append("중") }
-                },
-                color = com.suhwak.app.ui.theme.Sea.Accent,
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Black,
+        Column(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).clickable { showLevels = true }.padding(vertical = 2.dp)) {
+            FitText(
+                "Lv.$level ${Levels.title(level)} ${Levels.starText(Levels.stars(known, total, level))}",
+                MaterialTheme.typography.labelLarge.copy(color = Sea.Soft),
+                align = TextAlign.Start,
             )
-            Text("오늘도 수확해 볼까? 🍎", color = com.suhwak.app.ui.theme.Sea.Soft, style = MaterialTheme.typography.bodyMedium)
-            Spacer(Modifier.height(10.dp))
-            // Who the child is: the level badge (today's numbers live in the card below). Tap for the level popup.
-            Column(
-                Modifier
-                    .padding(end = 174.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color.White.copy(alpha = 0.6f))
-                    .border(1.5.dp, com.suhwak.app.ui.theme.Sea.Line, RoundedCornerShape(14.dp))
-                    .clickable { showLevels = true }
-                    .padding(horizontal = 12.dp, vertical = 7.dp),
-            ) {
-                FitText(
-                    "🏅 Lv.$level ${Levels.starText(Levels.stars(known, total, level))}",
-                    MaterialTheme.typography.titleSmall.copy(color = com.suhwak.app.ui.theme.Sea.Ink, fontWeight = FontWeight.Bold),
-                    align = TextAlign.Start,
-                )
-                FitText(Levels.title(level), MaterialTheme.typography.titleSmall.copy(color = com.suhwak.app.ui.theme.Sea.Ink, fontWeight = FontWeight.Bold), align = TextAlign.Start)
-                FitText(
-                    "🍎 ${stars}개 · 전체 ${Levels.percent(known, total)}% 외움",
-                    MaterialTheme.typography.labelSmall.copy(color = com.suhwak.app.ui.theme.Sea.Soft),
-                    align = TextAlign.Start,
-                )
+            FitText("오늘도 수확해 볼까?", MaterialTheme.typography.headlineMedium.copy(color = Sea.Deep, fontSize = 27.sp), align = TextAlign.Start)
+        }
+        Row(
+            Modifier.clip(RoundedCornerShape(50)).background(Sea.FruitSoft).clickable { showLevels = true }.padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("🍎", fontSize = 17.sp)
+            Spacer(Modifier.width(5.dp))
+            Text("$stars", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Sea.FruitText)
+        }
+    }
+}
+
+/** 오늘의 바구니 칸: 딴 열매는 주황 동그라미, 남은 칸은 빈 동그라미. 10칸씩 한 줄, 20칸이 넘으면 비율로 20칸. */
+@Composable
+private fun Basket(got: Int, goal: Int) {
+    val slots = goal.coerceIn(1, 20)
+    val filled = if (goal <= 20) got.coerceAtMost(slots) else (got * slots / goal.toFloat()).toInt().coerceAtMost(slots)
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        (0 until slots).chunked(10).forEach { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                row.forEach { i ->
+                    Box(
+                        Modifier.weight(1f).aspectRatio(1f).clip(CircleShape)
+                            .background(if (i < filled) Sea.Fruit else Color.White)
+                            .border(2.dp, if (i < filled) Sea.Fruit else MaterialTheme.colorScheme.outlineVariant, CircleShape),
+                    )
+                }
+                repeat(10 - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
-        Image(
-            painterResource(R.drawable.hero),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .size(166.dp)
-                .clip(RoundedCornerShape(28.dp))
-                .border(3.dp, Color.White, RoundedCornerShape(28.dp)),
-        )
     }
 }
 
@@ -908,96 +906,75 @@ private fun TodayCard(
         )
     }
     Card(
-        shape = MaterialTheme.shapes.large,
+        shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(18.dp)) {
             val goalsDone = (goalWords > 0 || goalMs > 0) &&
                 (goalWords == 0 || learned >= goalWords) && (goalMs == 0L || todayMs >= goalMs)
-            if (goalsDone) {
-                Text(
-                    "✅ 오늘 목표 달성!",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1B7A3A),
-                    modifier = Modifier.padding(bottom = 10.dp).background(Color(0xFFE7F6EC), RoundedCornerShape(10.dp)).padding(horizontal = 10.dp, vertical = 6.dp),
-                )
-            }
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable {
+                    info = "🧺 오늘의 바구니" to (
+                        "오늘 처음 맞힌 문제가 열매가 되어 바구니에 담겨요." +
+                            (if (goalWords > 0) "\n\n하루 목표는 ${goalWords}개예요. 목표를 채우면 🧺 오늘의 수확이 열려요." else "")
+                        )
+                },
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                Text("오늘의 바구니", style = MaterialTheme.typography.titleLarge, color = Sea.Deep, modifier = Modifier.weight(1f))
+                if (goalWords > 0) {
+                    Text(
+                        buildAnnotatedString {
+                            withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Sea.Deep, fontSize = 19.sp)) { append("$learned") }
+                            append(" / $goalWords")
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Sea.Soft,
+                    )
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            if (goalWords > 0) {
+                Basket(learned, goalWords)
+            } else {
+                ThickProgress(if (goalMs > 0) (todayMs / goalMs.toFloat()).coerceAtMost(1f) else 0f, Modifier.fillMaxWidth())
+            }
+            Spacer(Modifier.height(10.dp))
+            Text(
+                when {
+                    goalsDone -> "✅ 오늘 목표 달성! 바구니가 가득 찼어요"
+                    goalWords > 0 && learned < goalWords -> "${goalWords - learned}개 더 따면 오늘 목표 완료!"
+                    goalMs > 0 -> "${minutesText((goalMs - todayMs).coerceAtLeast(0))} 더 하면 오늘 목표 완료!"
+                    else -> "오늘 맞힌 문제 ${learned}개"
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (goalsDone) FontWeight.Bold else FontWeight.Normal,
+                color = if (goalsDone) Sea.Accent else Sea.Soft,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "⏱ 오늘 " + minutesText(todayMs) + (if (goalMs > 0) " / ${minutesText(goalMs)}" else "") +
+                    " · 복습 ${dueCount} · 새 문제 ${newCount} · 🔥 ${streak}일",
+                style = MaterialTheme.typography.labelMedium,
+                color = Sea.Soft,
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable {
                     info = "⏱ 오늘 공부" to (
-                        "오늘 공부한 시간이에요" + (if (goalMs > 0) ". 동그라미는 하루 최소 학습 시간 ${minutesText(goalMs)} 중 얼마나 했는지예요" else "") +
+                        "오늘 공부한 시간이에요" + (if (goalMs > 0) ". 하루 최소 학습 시간은 ${minutesText(goalMs)}예요" else "") +
                             ". 화면을 한동안 안 건드리면 시간이 멈춰요.\n\n" +
                             "📚 복습 ${dueCount}개: 잊을 때쯤 다시 보는 문제예요.\n" +
                             "🆕 새 문제 ${newCount}개: 오늘 처음 배울 문제예요.\n" +
                             "🔥 ${streak}일 연속: 하루도 안 빠지고 공부한 날이에요. 7일마다 배지와 선물 열매를 받아요."
                         )
-                },
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(Modifier.size(64.dp), contentAlignment = Alignment.Center) {
-                    val progress = if (goalMs > 0) (todayMs / goalMs.toFloat()).coerceAtMost(1f) else 0f
-                    CircularProgressIndicator(
-                        progress = { progress },
-                        modifier = Modifier.size(64.dp),
-                        strokeWidth = 7.dp,
-                        trackColor = MaterialTheme.colorScheme.outlineVariant,
-                        gapSize = 0.dp,
-                    )
-                    Text(
-                        if (goalMs > 0) "${(progress * 100).toInt()}%" else "🔥$streak",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-                Column(Modifier.padding(start = 14.dp)) {
-                    Text(
-                        "오늘 " + minutesText(todayMs) + if (goalMs > 0) " / ${minutesText(goalMs)}" else "",
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Text(
-                        "복습 ${dueCount}개 · 새 문제 ${newCount}개 · 🔥 ${streak}일 연속",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline,
-                    )
-                }
-            }
-            if (goalWords > 0) {
-                Spacer(Modifier.height(12.dp))
-                Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable {
-                        info = "🧠 오늘 맞힌 문제" to (
-                            "오늘 처음 맞힌 문제 수예요.\n\n" +
-                                "하루 목표는 ${goalWords}개예요. 목표를 채우면 🧺 오늘의 수확이 열려요."
-                            )
-                    },
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("🧠 오늘 맞힌 문제", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.weight(1f))
-                    Text(
-                        if (learned >= goalWords) "$learned / $goalWords 달성 🎉" else "$learned / $goalWords",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-                Spacer(Modifier.height(6.dp))
-                ThickProgress((learned / goalWords.toFloat()).coerceAtMost(1f), Modifier.fillMaxWidth())
-            }
-            Spacer(Modifier.height(12.dp))
+                }.padding(vertical = 4.dp),
+            )
+            Spacer(Modifier.height(10.dp))
             if (goalsDone) {
-                // Goals met: keep going with the next new words.
                 SecondaryButton("📚 새 문제 더 배우기", onToday)
             } else if (dueCount + newCount > 0) {
-                PrimaryButton("오늘 학습 시작", onToday)
+                PrimaryButton("🌱 오늘의 수확 시작", onToday)
             } else {
-                Text(
-                    "오늘 할 문제를 다 했어요 👍",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+                Text("오늘 할 문제를 다 했어요 👍", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
             }
         }
     }
@@ -1011,7 +988,7 @@ internal fun Stat(label: String, value: String, modifier: Modifier = Modifier) {
     }
 }
 
-/** Coloured deck cover: tap to study, the 목록 chip opens the word list; long press for the menu. */
+/** 과수원 한 줄: 누르면 학습, '목록'은 문제 보기, 길게 누르면 메뉴. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun DeckTile(
@@ -1030,70 +1007,78 @@ private fun DeckTile(
 ) {
     var menu by remember { mutableStateOf(false) }
     val progress = if (deck.wordCount == 0) 0f else deck.knownCount / deck.wordCount.toFloat()
+    // "1. 유리수와 순환소수 · 유형 씨앗 2-1" -> 번호 1, 이름 "유리수와 순환소수", 덧말 "유형 씨앗 2-1"
+    val m = Regex("""^(\d+)\.\s*(.*)$""").find(deck.name)
+    val number = m?.groupValues?.get(1)
+    val rest = m?.groupValues?.get(2) ?: deck.name
+    val title = rest.substringBefore(" · ")
+    val sub = rest.substringAfter(" · ", "")
+    val on = if (progress <= 0f) 0 else maxOf(1, Math.round(progress * 12))
     Box {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .heightIn(min = 168.dp)
-                .clip(RoundedCornerShape(18.dp))
-                .background(DeckColors[deckColorIndex(deck)])
-                .then(
-                    if (selected) Modifier.border(3.dp, com.suhwak.app.ui.theme.Sea.Ink, RoundedCornerShape(18.dp)) else Modifier,
-                )
-                .combinedClickable(
-                    onClick = if (selecting) onToggle else if (deck.wordCount > 0) onStudy else onOpen,
-                    onLongClick = if (selecting) onToggle else ({ menu = true }),
-                )
-                .padding(14.dp),
-        ) {
-            Row(verticalAlignment = Alignment.Top) {
-                Text(deckEmoji(deck), fontSize = 30.sp, modifier = Modifier.weight(1f))
-                if (selecting) {
-                    Icon(
-                        if (selected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                        contentDescription = if (selected) "골랐음" else "안 골랐음",
-                        tint = com.suhwak.app.ui.theme.Sea.Ink,
-                        modifier = Modifier.size(30.dp),
+        Column(Modifier.fillMaxWidth()) {
+            Box(Modifier.fillMaxWidth().padding(end = 10.dp).height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 60.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (selected) Sea.MintCard else Color.Transparent)
+                    .combinedClickable(
+                        onClick = if (selecting) onToggle else if (deck.wordCount > 0) onStudy else onOpen,
+                        onLongClick = if (selecting) onToggle else ({ menu = true }),
                     )
-                } else if (deck.wordCount > 0) {
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.width(34.dp), contentAlignment = Alignment.Center) {
+                    if (selecting) {
+                        Icon(
+                            if (selected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                            contentDescription = if (selected) "골랐음" else "안 골랐음",
+                            tint = Sea.Deep,
+                            modifier = Modifier.size(26.dp),
+                        )
+                    } else if (number != null) {
+                        Text(number, style = MaterialTheme.typography.titleLarge, color = Sea.Accent)
+                    } else {
+                        Text(deckEmoji(deck), fontSize = 22.sp)
+                    }
+                }
+                Column(Modifier.weight(1f).padding(start = 6.dp)) {
+                    Text(title, style = MaterialTheme.typography.titleSmall, color = Sea.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Spacer(Modifier.height(5.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                        repeat(12) { i ->
+                            Box(Modifier.weight(1f).height(8.dp).clip(RoundedCornerShape(4.dp)).background(if (i < on) Sea.Accent else Sea.Empty))
+                        }
+                    }
                     Text(
-                        "목록 ›",
-                        color = com.suhwak.app.ui.theme.Sea.Ink,
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(Color.White.copy(alpha = 0.65f))
-                            .clickable(onClick = onOpen)
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        listOfNotNull(
+                            if (deck.isCollection) "📚 종합" else null,
+                            sub.ifBlank { null },
+                            "${deck.wordCount}문제",
+                            collectionName,
+                        ).joinToString(" · "),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Sea.Soft,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 3.dp),
                     )
                 }
+                Text(
+                    "${(progress * 100).toInt()}%",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Sea.Soft,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.width(44.dp),
+                )
+                if (!selecting && deck.wordCount > 0) {
+                    TextButton(onClick = onOpen, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("목록", color = Sea.Deep) }
+                } else {
+                    Spacer(Modifier.width(10.dp))
+                }
             }
-            Spacer(Modifier.weight(1f))
-            Text(
-                deck.name,
-                color = com.suhwak.app.ui.theme.Sea.Ink,
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                (if (deck.isCollection) "📚 종합 · " else "") + "${deck.wordCount}개 · ${(progress * 100).toInt()}%" +
-                    (collectionName?.let { " · $it" } ?: ""),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                color = com.suhwak.app.ui.theme.Sea.Soft,
-                style = MaterialTheme.typography.labelMedium,
-            )
-            Spacer(Modifier.height(8.dp))
-            LinearProgressIndicator(
-                progress = { progress },
-                modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
-                color = com.suhwak.app.ui.theme.Sea.Ink.copy(alpha = 0.45f),
-                trackColor = Color.White.copy(alpha = 0.75f),
-                gapSize = 0.dp,
-                drawStopIndicator = {},
-            )
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
             DropdownMenuItem(text = { Text("문제 목록·편집") }, leadingIcon = { Icon(Icons.AutoMirrored.Filled.List, null) }, onClick = { menu = false; onOpen() })

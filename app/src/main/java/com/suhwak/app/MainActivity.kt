@@ -9,12 +9,18 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
@@ -29,6 +35,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -64,6 +71,7 @@ private data class Tab(val route: String, val label: String, val icon: ImageVect
 private val Tabs = listOf(
     Tab("home", "홈", Icons.Default.Home),
     Tab("review", "복습·통계", Icons.Default.Insights),
+    Tab("wrongnote", "오답노트", Icons.Default.EditNote),
     Tab("settings", "설정", Icons.Default.Settings),
 )
 
@@ -127,8 +135,13 @@ private fun AppContent() {
                     bottomBar = {
                         // The tab bar only shows on the three top-level screens.
                         if (Tabs.any { it.route == route }) {
-                            NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                                Tabs.forEach { tab ->
+                            NavigationBar(
+                                containerColor = MaterialTheme.colorScheme.surface,
+                                modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)),
+                            ) {
+                                Tabs.forEachIndexed { i, tab ->
+                                    // 가운데 둥근 '수확' 버튼: 오늘 학습을 바로 시작
+                                    if (i == 2) HarvestButton { nav.navigate("study/-1?today=true") }
                                     NavigationBarItem(
                                         selected = route == tab.route,
                                         onClick = {
@@ -275,4 +288,27 @@ private fun AppContent() {
                     }
                     }
                 }
+}
+
+
+/** 아래 탭 가운데의 둥근 '수확' 버튼 (짙은 녹색). */
+@androidx.compose.runtime.Composable
+private fun androidx.compose.foundation.layout.RowScope.HarvestButton(onClick: () -> Unit) {
+    androidx.compose.foundation.layout.Box(
+        Modifier.weight(1f).fillMaxHeight(),
+        contentAlignment = androidx.compose.ui.Alignment.Center,
+    ) {
+        androidx.compose.foundation.layout.Column(
+            Modifier
+                .size(62.dp)
+                .clip(androidx.compose.foundation.shape.CircleShape)
+                .background(com.suhwak.app.ui.theme.Sea.Deep)
+                .clickable(onClickLabel = "오늘의 수확 시작", onClick = onClick),
+            horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+            verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+        ) {
+            Text("🌱", fontSize = 20.sp)
+            Text("수확", color = androidx.compose.ui.graphics.Color.White, fontSize = 12.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+        }
+    }
 }

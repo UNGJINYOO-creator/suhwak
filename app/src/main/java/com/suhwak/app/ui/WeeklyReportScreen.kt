@@ -80,7 +80,7 @@ class WeeklyReportViewModel(app: Application) : AndroidViewModel(app) {
 // Status colours stay fixed; they always come with a label, never alone.
 private val Good = Color(0xFF0CA30C)
 private val MissBar = Color(0xFFB9B8B2)
-private val StageColors = listOf(Color(0xFFE3E2DE), Color(0xFF86B6EF), Color(0xFF3987E5), Color(0xFF1C5CAB))
+private val StageColors = listOf(Color(0xFFE3E2DE), Color(0xFFB9D39A), Color(0xFF7FA552), Color(0xFF4B6B2A))
 
 /** 주간 리포트: the last 7 days for the parents, in charts and plain words. */
 @Composable
