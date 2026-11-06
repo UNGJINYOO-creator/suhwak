@@ -18,7 +18,7 @@ class LevelsTest {
         assertEquals(3, Levels.stars(1800, 1800, 7))
         assertEquals(0, Levels.stars(100, 2000, 3))
         assertEquals("★★☆", Levels.starText(2))
-        assertEquals("베테랑 단어꾼", Levels.title(3))
-        assertEquals("심해의 은둔 고수", Levels.title(7))
+        assertEquals("부지런한 농부", Levels.title(3))
+        assertEquals("숨은 과수원 고수", Levels.title(7))
     }
 }
