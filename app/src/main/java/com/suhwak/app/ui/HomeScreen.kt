@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.runtime.key
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import com.suhwak.app.ui.theme.Sea
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -146,6 +147,9 @@ fun deckColorIndex(deck: DeckSummary): Int =
 
 fun deckEmoji(deck: DeckSummary): String = deck.emoji.ifEmpty { DeckEmojis[(deck.id % DeckEmojis.size).toInt()] }
 
+/** 이름 앞의 단원 번호 ("3. 다항식의 계산" -> 3), 없으면 맨 뒤. */
+private fun unitNo(name: String): Int = Regex("""^(\d+)\.""").find(name)?.groupValues?.get(1)?.toIntOrNull() ?: Int.MAX_VALUE
+
 enum class DeckSort(val label: String) { RECENT("최근 학습순"), NAME("이름순"), PROGRESS("진도 낮은순") }
 
 class HomeViewModel(app: Application) : AndroidViewModel(app) {
@@ -159,8 +163,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     val decks = combine(dao.observeDecks(), sort) { list, s ->
         when (s) {
-            DeckSort.RECENT -> list.sortedByDescending { maxOf(it.lastStudiedAt, it.createdAt) }
-            DeckSort.NAME -> list.sortedBy { it.name.lowercase() }
+            // 최근 학습순: 공부한 문제집이 위로, 아직 안 한 문제집은 단원 번호(1. 2. 3. …) 순서대로
+            DeckSort.RECENT -> list.sortedWith(compareByDescending<DeckSummary> { it.lastStudiedAt }.thenBy { unitNo(it.name) }.thenBy { it.name.lowercase() })
+            DeckSort.NAME -> list.sortedWith(compareBy<DeckSummary> { unitNo(it.name) }.thenBy { it.name.lowercase() })
             DeckSort.PROGRESS -> list.sortedBy { if (it.wordCount == 0) 0f else it.knownCount / it.wordCount.toFloat() }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -862,7 +867,7 @@ private fun HomeHeader(level: Int, known: Int, total: Int, stars: Int, totalMs: 
 private fun Basket(got: Int, goal: Int) {
     val slots = goal.coerceIn(1, 20)
     val filled = if (goal <= 20) got.coerceAtMost(slots) else (got * slots / goal.toFloat()).toInt().coerceAtMost(slots)
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(Modifier.widthIn(max = 460.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         (0 until slots).chunked(10).forEach { row ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 row.forEach { i ->

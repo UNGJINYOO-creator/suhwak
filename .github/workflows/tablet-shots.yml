@@ -32,18 +32,8 @@ jobs:
           disable-animations: true
           script: |
             adb install -g Suhwak.apk
-            adb shell wm size 1080x2340 && adb shell wm density 420 && sleep 3
-            python3 tools/tablet_shots.py shots phone
-            adb shell pm clear com.suhwak.app
-            adb shell wm size 1600x2560 && adb shell wm density 320 && sleep 3
-            python3 tools/tablet_shots.py shots portrait
-            adb shell pm clear com.suhwak.app
-            adb install -r -g Suhwak.apk
-            adb shell wm size 2560x1600 && adb shell wm density 320 && sleep 3
-            python3 tools/tablet_shots.py shots landscape
-            adb shell pm clear com.suhwak.app
-            adb shell wm size 1200x1920 && adb shell wm density 240 && sleep 3
-            python3 tools/tablet_shots.py shots small-tablet
+            mkdir -p shots
+            for spec in "phone 1080x2340 420" "portrait 1600x2560 320" "landscape 2560x1600 320" "small-tablet 1200x1920 240"; do set -- $spec; adb shell pm clear com.suhwak.app; adb shell pm grant com.suhwak.app android.permission.POST_NOTIFICATIONS || true; adb shell wm size $2; adb shell wm density $3; sleep 3; adb logcat -c; python3 tools/tablet_shots.py shots $1; adb logcat -d -b crash > shots/$1-crash.txt; adb logcat -d -s AndroidRuntime:E System.err:W > shots/$1-errors.txt; done
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -57,6 +47,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cd shots && zip -q ../tablet-shots.zip *.png && cd ..
+          cd shots && zip -q ../tablet-shots.zip *.png *.txt && cd ..
           gh release create tablet-shots-${{ github.run_number }} tablet-shots.zip -R ${{ github.repository }} \
             --prerelease --latest=false --title "태블릿 화면 점검 ${{ github.run_number }}" --notes "개발용 스크린샷"

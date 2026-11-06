@@ -15,16 +15,16 @@ data class Coupon(val name: String, val claimedAt: Long, val used: Boolean)
 
 /** Levels and their titles, set by the share of all words the child knows: 0% is Lv.1, 100% is Lv.7. */
 object Levels {
-    val titles = listOf("초보 단어꾼", "손맛 아는 단어꾼", "베테랑 단어꾼", "영웅 단어꾼", "전설의 강태공", "신화 속 단어신", "심해의 은둔 고수")
+    val titles = listOf("새싹 농부", "꼬마 농부", "부지런한 농부", "과수원 농부", "수확왕 농부", "전설의 농부", "숨은 과수원 고수")
     val grades = listOf("일반", "고급", "희귀", "영웅", "전설", "신화", "비밀")
     val descriptions = listOf(
-        "이제 막 단어를 낚기 시작한 풋내기",
-        "기초 단어는 막힘없이 척척 낚아채는 단어꾼",
-        "어려운 단어도 묵직하게 잘 낚는 숙련자",
-        "웬만한 고난도 단어도 다 알아보는 고수",
-        "어떤 단어가 나와도 한 손으로 낚아채는 마스터",
-        "단어의 경지에 올라선 만렙 단어꾼",
-        "깊은 바다에 숨은 단어까지 낚는, 아무도 정체를 모르는 고수",
+        "이제 막 씨앗을 심기 시작한 새싹 농부",
+        "쉬운 문제는 척척 키워 내는 꼬마 농부",
+        "어려운 문제도 꾸준히 가꾸는 부지런한 농부",
+        "웬만한 유형은 다 열매 맺게 하는 과수원 농부",
+        "어떤 문제가 나와도 거뜬히 수확하는 수확왕",
+        "모든 밭에서 열매를 거둔 전설의 농부",
+        "모든 씨앗을 다 키워 낸, 아무도 정체를 모르는 고수",
     )
 
     /** Percent of all words known to reach each level (1-based); only every word known reaches the last. */

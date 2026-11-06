@@ -80,8 +80,10 @@ if tap("Lv."):
 
 restart()
 if tap("오늘의 수확 시작") or tap("수확", exact=True):
-    time.sleep(3)
+    time.sleep(6)
     shot("13-solve")
+    time.sleep(6)
+    shot("13b-solve-later")
     scroll(); shot("14-solve-scrolled")
 
 restart()
