@@ -63,6 +63,15 @@ object SeedImport {
         List(a.length()) { a.getString(it) }
     }.getOrDefault(emptyList())
 
+    /** 풀이 줄 안의 구분선: 이 줄 뒤는 '자세한 풀이'에만 보여준다 (3차 빈칸 풀이에서 정답이 미리 보이지 않게). */
+    const val DETAIL_MARK = "##자세히"
+
+    /** 3차 빈칸 풀이에 쓰는 줄 (구분선 앞). */
+    fun clozeStepsOf(w: Word): List<String> = stepsOf(w).takeWhile { it != DETAIL_MARK }
+
+    /** 자세한 풀이에 쓰는 줄 전부 (구분선만 뺀다). */
+    fun detailStepsOf(w: Word): List<String> = stepsOf(w).filter { it != DETAIL_MARK }
+
     /** 씨앗의 풀이 줄들 ([[값]]은 빈칸). */
     fun stepsOf(w: Word): List<String> = runCatching {
         val a = JSONArray(w.steps)

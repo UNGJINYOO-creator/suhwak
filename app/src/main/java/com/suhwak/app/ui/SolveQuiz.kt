@@ -86,7 +86,8 @@ fun SolveQuiz(
     val notebook = remember { NotebookCopy(context) }
     val mc = word.qtype == "mc"
     val choices = remember(word.id) { SeedImport.choicesOf(word) }
-    val steps = remember(word.id) { SeedImport.stepsOf(word) }
+    val steps = remember(word.id) { SeedImport.clozeStepsOf(word) }
+    val detailSteps = remember(word.id) { SeedImport.detailStepsOf(word) }
     val answerIndex = remember(word.id) { if (mc) CIRCLES.indexOf(word.meaning.trim().firstOrNull() ?: ' ') + 1 else 0 }
     val shownAt = remember(word.id) { System.currentTimeMillis() }
     val label = remember(word.id, number) { SimpleDateFormat("M/d", Locale.KOREA).format(Date()) + " · ${number}번" }
@@ -185,7 +186,7 @@ fun SolveQuiz(
     val clozePart: @Composable () -> Unit = {
         if (stage >= 2 && tries != 1 && tries != 2) {
             if (explained) {
-                DetailedSolution(word, steps, choices, answerIndex)
+                DetailedSolution(word, detailSteps, choices, answerIndex)
             } else {
                 ClozeSolve(
                     steps, word.example, done = clozeDone, onActivity = onActivity, onDone = { clozeDone = true },
@@ -450,8 +451,6 @@ private fun ClozeSolve(steps: List<String>, explanation: String, done: Boolean, 
     }
 }
 
-private const val STEP_MARKS = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮"
-
 /**
  * 자세한 풀이: 3차 빈칸 풀이를 못 채웠을 때. 이 유형의 핵심(힌트) → 풀이 줄 전부(빈칸 자리 값은 노란색으로 강조) → 정답 → 정리.
  * 다 읽고 공책에 옮겨 적은 뒤, 아이가 답을 직접 써서 내야 넘어간다.
@@ -474,9 +473,21 @@ private fun DetailedSolution(word: Word, steps: List<String>, choices: List<Stri
         }
         if (cloze.lines.isNotEmpty()) {
             Text("풀이 순서", fontWeight = FontWeight.Bold, color = Color(0xFF2B3A4F))
-            cloze.lines.forEachIndexed { n, pieces ->
+            var n = 0
+            cloze.lines.forEach { pieces ->
+                // 보기 판단 줄(①…⑤로 시작)이나 그림 글자로 시작하는 줄은 번호 없이, 풀이 줄은 1 2 3 … 번호를 붙인다
+                val first = pieces.firstOrNull()?.text?.trimStart().orEmpty()
+                val numbered = first.isEmpty() || (first[0] !in "①②③④⑤" && !Character.isSurrogate(first[0]))
                 Row(verticalAlignment = Alignment.Top) {
-                    Text(STEP_MARKS.getOrElse(n) { '•' } + " ", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFFB0691F))
+                    if (numbered) {
+                        n++
+                        Text(
+                            "$n",
+                            fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White,
+                            modifier = Modifier.padding(top = 3.dp, end = 6.dp).clip(RoundedCornerShape(10.dp))
+                                .background(Color(0xFFB0691F)).padding(horizontal = 7.dp, vertical = 1.dp),
+                        )
+                    }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                         pieces.forEach { piece ->
                             if (piece.blankIndex < 0) {

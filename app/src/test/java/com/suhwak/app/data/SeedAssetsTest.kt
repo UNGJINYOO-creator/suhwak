@@ -21,8 +21,9 @@ class SeedAssetsTest {
             assertTrue("목록 글자에 수식 기호: ${w.text}", '\\' !in w.text && '$' !in w.text)
             assertTrue("정답 처리 안 됨: ${w.sourceId} ${w.meaning}", MathGrade.isRight(w.qtype, w.meaning, w.meaning))
             if (w.qtype == "mc") assertEquals(5, SeedImport.choicesOf(w).size)
-            val cloze = MathCloze.build(SeedImport.stepsOf(w))
+            val cloze = MathCloze.build(SeedImport.clozeStepsOf(w))
             assertTrue(cloze.answers.all { it.isNotBlank() })
+            assertTrue("자세한 풀이가 짧음: ${w.sourceId} ${w.pos}", SeedImport.detailStepsOf(w).size >= 3)
         }
     }
 
