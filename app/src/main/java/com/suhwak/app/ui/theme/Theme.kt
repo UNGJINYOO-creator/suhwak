@@ -149,10 +149,18 @@ private val AppShapes = Shapes(
 
 @Composable
 fun WordBookTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = if (isSystemInDarkTheme()) Dark else Light,
-        typography = AppTypography,
-        shapes = AppShapes,
-        content = content,
-    )
+    // 휴대폰(짧은 쪽 600dp 미만)은 글자를 조금(8%) 작게: 태블릿 기준 크기라 폰에서는 커 보였다.
+    val phone = androidx.compose.ui.platform.LocalConfiguration.current.smallestScreenWidthDp < 600
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    androidx.compose.runtime.CompositionLocalProvider(
+        androidx.compose.ui.platform.LocalDensity provides
+            if (phone) androidx.compose.ui.unit.Density(density.density, density.fontScale * 0.92f) else density,
+    ) {
+        MaterialTheme(
+            colorScheme = if (isSystemInDarkTheme()) Dark else Light,
+            typography = AppTypography,
+            shapes = AppShapes,
+            content = content,
+        )
+    }
 }

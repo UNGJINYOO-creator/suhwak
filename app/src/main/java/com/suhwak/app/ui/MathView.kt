@@ -36,7 +36,9 @@ fun MathView(
 ) {
     var heightDp by remember { mutableFloatStateOf(0f) }
     val latestPick by rememberUpdatedState(onPick)
-    val html = remember(question, choices) { page(question, choices) }
+    // 휴대폰(짧은 쪽 600dp 미만)은 글자를 줄이고 긴 보기는 한 줄씩
+    val phone = androidx.compose.ui.platform.LocalConfiguration.current.smallestScreenWidthDp < 600
+    val html = remember(question, choices, phone) { page(question, choices, phone) }
     val state = "S(${selected ?: 0},${answer ?: 0},${if (locked) 1 else 0})"
     AndroidView(
         factory = { ctx ->
@@ -84,13 +86,28 @@ private fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replac
 /** 문장 속 분수가 작게 보이지 않게 \frac -> \dfrac. */
 private fun big(s: String) = s.replace("\\frac", "\\dfrac")
 
-/** 보기가 모두 짧으면(수식 기호를 빼고 14자 이하, 분수·연립 없음) 두 줄로 크게 놓는다. */
-private fun shortChoices(choices: List<String>): Boolean = choices.isNotEmpty() && choices.all { c ->
-    "\\begin" !in c && "\\frac" !in c && c.replace(Regex("""\\[a-zA-Z]+|[${'$'}{}\s]"""), "").length <= 14
+/** 보기 글자 수 (수식 명령·괄호·빈칸 빼고). 분수·연립이 있으면 아주 길게 친다. */
+private fun choiceLen(c: String): Int =
+    if ("\\begin" in c || "\\frac" in c) 99 else c.replace(Regex("""\\[a-zA-Z]+|[${'$'}{}\s]"""), "").length
+
+/**
+ * 보기를 두 칸씩 놓을지: 0 = 한 줄씩, 1 = 태블릿(넓은 화면)에서만 두 칸 (14자 이하), 2 = 휴대폰에서도 두 칸 (7자 이하).
+ * 휴대폰에서 "5 < -4x + 5 < 25" 같은 보기를 두 칸에 넣으면 세 줄로 꺾여서 읽기 어렵다.
+ */
+private fun gridLevel(choices: List<String>): Int {
+    if (choices.isEmpty()) return 0
+    val longest = choices.maxOf { choiceLen(it) }
+    return when {
+        longest <= 7 -> 2
+        longest <= 14 -> 1
+        else -> 0
+    }
 }
 
-private fun page(question: String, choices: List<String>): String {
-    val grid = shortChoices(choices)
+private fun page(question: String, choices: List<String>, phone: Boolean): String {
+    val level = gridLevel(choices)
+    val grid = level > 0
+    val bodyClass = if (phone) " class=\"ph\"" else ""
     val buttons = choices.mapIndexed { i, c ->
         val wide = grid && choices.size % 2 == 1 && i == choices.lastIndex
         """<button class="c${if (wide) " w" else ""}" id="c${i + 1}" onclick="if(!L)Bridge.pick(${i + 1})"><span class="mk">${MARKS.getOrElse(i) { '•' }}</span><span class="ct">${esc(big(c))}</span></button>"""
@@ -105,6 +122,7 @@ html,body{margin:0;padding:0;background:transparent;color:#222B18;font-family:sa
 .q .katex{font-size:1.1em}
 .cs{display:flex;flex-direction:column;gap:9px}
 .cs.g{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.g .ct{white-space:nowrap}
 .c{display:flex;gap:12px;align-items:center;text-align:left;background:#fff;border:3px solid #fff;border-radius:18px;padding:10px 14px;font-size:18px;min-height:56px;color:#222B18;font-family:inherit;width:100%;box-sizing:border-box}
 .g .c{justify-content:center;min-height:64px;font-size:20px}
 .g .c.w{grid-column:span 2}
@@ -112,9 +130,16 @@ html,body{margin:0;padding:0;background:transparent;color:#222B18;font-family:sa
 .c.on{background:#DCE6C4;border-color:#4B6B2A}.c.on .mk{color:#2F4419;font-weight:700}
 .c.ans{background:#FBE3D5;border-color:#D9622B}.c.ans .mk{color:#A9481B;font-weight:700}
 .c.bad{background:#FDECEC;border-color:#C8372D}
-</style></head><body>
+/* 휴대폰(화면 폭 600dp 미만, body.ph): 글자를 줄이고, 아주 짧은 보기(g2)만 두 칸 */
+.ph .q{font-size:17px;line-height:1.7;padding:14px 16px 16px;border-radius:18px}
+.ph .c{font-size:16px;min-height:50px;padding:8px 12px;border-radius:16px}
+.ph .c .mk{font-size:15px}
+.ph .cs.g:not(.g2){display:flex;flex-direction:column;gap:8px}
+.ph .cs.g:not(.g2) .c{justify-content:flex-start;min-height:50px;font-size:16px}
+.ph .g2 .c{min-height:54px;font-size:17px}
+</style></head><body$bodyClass>
 ${if (question.isBlank()) "" else "<div class=\"q\" id=\"q\">" + esc(big(question)) + "</div>"}
-<div class="cs${if (grid) " g" else ""}">$buttons</div>
+<div class="cs${if (level == 2) " g g2" else if (level == 1) " g" else ""}">$buttons</div>
 <script>
 var L=0;
 function S(sel,ans,locked){L=locked;
