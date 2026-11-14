@@ -35,7 +35,7 @@ class Fishing(context: Context) {
         }
     }
 
-    val unlimited: Boolean get() = settings.fishTries <= 0
+    val unlimited: Boolean get() = settings.fishTries <= 0 || settings.testMode
     val triesLeft: Int
         get() {
             ensureToday()

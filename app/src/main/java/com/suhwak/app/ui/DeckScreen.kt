@@ -181,7 +181,7 @@ fun DeckScreen(
     var unlocked by remember { mutableStateOf(false) }
     var pending by remember { mutableStateOf<(() -> Unit)?>(null) }
     val guard: (() -> Unit) -> Unit = { action ->
-        if (!vm.settings.hasPin || unlocked) action() else pending = action
+        if (!vm.settings.locked || unlocked) action() else pending = action
     }
     var menuOpen by remember { mutableStateOf(false) }
     var filter by rememberSaveable { mutableStateOf(WordFilter.ALL) }
@@ -406,7 +406,7 @@ fun DeckScreen(
         )
     }
     if (showDelete) {
-        if (vm.settings.hasPin) {
+        if (vm.settings.locked) {
             PinConfirmDialog(
                 text = "'${deck?.name}' 문제집과 문제 ${words.size}개를 삭제하려면 비밀번호를 입력하세요.",
                 check = vm.settings::checkPin,

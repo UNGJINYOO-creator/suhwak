@@ -285,6 +285,8 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
     private var allSeeds = listOf<Word>()
     private val weakTypes = WeakTypes(app)
     private val typeReview = com.suhwak.app.data.TypeReview(app)
+    /** 🧪 테스트 모드(이 기기만): 풀어 볼 수는 있지만 기록·열매·복습·오답노트·학습 시간을 남기지 않는다. */
+    val testMode = settings.testMode
     /** 간격 복습으로 나온 문제 (wordId -> 유형). */
     private val typeReviewOf = mutableMapOf<Long, String>()
     /** 문제 위에 붙는 표시: 쌍둥이 n/N, 다시 보기. */
@@ -422,7 +424,7 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
                 delay(1000)
                 if (loading || finished) continue
                 paused = System.currentTimeMillis() - lastTouch > idleMs
-                if (!paused) {
+                if (!paused && !testMode) {
                     stats.addStudyMs(1000, mode.name)
                     todayMs = stats.studyMs
                     checkGoal()
@@ -497,7 +499,7 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
 
     /** 콤보 없이 열매만 (2차에 맞혔을 때, 쌍둥이 통과 보너스). */
     private fun addFruit(n: Int, text: String) {
-        if (n <= 0) return
+        if (n <= 0 || testMode) return
         sessionStars += n
         game.addStars(n)
         celebrate(text, sound = false)
@@ -818,7 +820,7 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
         if (guessed && answer != Answer.UNKNOWN) {
             celebrate(if (mode == StudyMode.SOLVE) "너무 빨라요! 공책에 풀고 내요" else "너무 빨라요! 정답을 읽고 골라요 🙂", sound = false)
         }
-        if (mode != StudyMode.CARD) {
+        if (mode != StudyMode.CARD && !testMode) {
             answerLog.add(
                 AnswerEntry(
                     time = System.currentTimeMillis(),
@@ -834,7 +836,7 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
                 ),
             )
         }
-        if (mode != StudyMode.CARD && !guessed) {
+        if (mode != StudyMode.CARD && !guessed && !testMode) {
             // 수학 씨앗: 1차·2차에 틀린 만큼 (3차까지 가면 2번 틀림), 틀린 답도 같이 저장
             val noted = if (mode == StudyMode.SOLVE) wrongNote.record(word.id, (solveTries - 1).coerceIn(0, 3), solveWrongs)
             else wrongNote.record(word.id, answer != Answer.UNKNOWN)
@@ -898,7 +900,7 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
             }
         }
         scheduled += word.id
-        if (updated != word) {
+        if (updated != word && !testMode) {
             viewModelScope.launch { dao.updateWord(updated) }
             keepLatest(updated)
         }
@@ -933,16 +935,18 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
         val firstTry = solveTries == 1 && !guessed
         // 풀이를 보고서야 맞힌 문제(4): 쌍둥이와 별개로 다음 날에도 한 번 더 (다시 볼 유형)
         if (solveTries == 4 && settings.weakDaily > 0 && word.pos.isNotBlank()) {
-            weakTypes.add(word.pos)
+            if (!testMode) weakTypes.add(word.pos)
             if (word.pos !in weakAdded) weakAdded += word.pos
         }
         // 간격 복습 (유형 단위): 찍은 답은 빼고, 이 유형의 결과를 넣는다 (하루에 첫 결과만)
-        if (!guessed && word.pos.isNotBlank() && settings.reviewDaily > 0) {
+        if (testMode) {
+            // 기록은 남기지 않고, 쌍둥이 문제가 이어지는 흐름만 그대로 보여준다
+        } else if (!guessed && word.pos.isNotBlank() && settings.reviewDaily > 0) {
             val note = typeReview.result(word.pos, solveTries, settings.reviewDayList)
             if (note != null && word.id in typeReviewOf) celebrate(note, sound = false)
         }
         if (word.id !in typeReviewOf) reviewOf[word.id]?.let { concept ->
-            if (weakTypes.result(concept, firstTry, settings.weakClear)) celebrate("🎓 '$concept' 다시 보기 졸업!")
+            if (!testMode && weakTypes.result(concept, firstTry, settings.weakClear)) celebrate("🎓 '$concept' 다시 보기 졸업!")
         }
         val chain = twinOf[word.id]
         if (chain != null) {
@@ -953,7 +957,7 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
                     twinsPassed++
                     addFruit(1, "🌱 쌍둥이 통과! 🍎 +1")
                 } else if (settings.weakDaily > 0) {
-                    weakTypes.add(chain.concept)
+                    if (!testMode) weakTypes.add(chain.concept)
                     if (chain.concept !in weakAdded) weakAdded += chain.concept
                     celebrate("🔁 이 유형은 내일 다시 볼게요", sound = false)
                 }
@@ -966,7 +970,7 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
         val twins = twinCandidates(word.pos, busy + word.id).take(n)
         if (twins.isEmpty()) {
             if (settings.weakDaily > 0) {
-                weakTypes.add(word.pos)
+                if (!testMode) weakTypes.add(word.pos)
                 if (word.pos !in weakAdded) weakAdded += word.pos
             }
             return emptyList()

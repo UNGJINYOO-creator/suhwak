@@ -38,6 +38,8 @@ object Backup {
             roots(context).forEach { (name, dir) ->
                 dir.walkTopDown().filter { it.isFile }.forEach { file ->
                     if (name == "databases" && !file.name.startsWith(DB)) return@forEach
+                    // 이 기기에만 있는 설정(테스트 모드)은 백업에 넣지 않는다
+                    if (name == "shared_prefs" && file.name == DeviceMode.PREFS + ".xml") return@forEach
                     zip.putNextEntry(ZipEntry("$name/" + file.relativeTo(dir).path))
                     file.inputStream().use { it.copyTo(zip) }
                     zip.closeEntry()

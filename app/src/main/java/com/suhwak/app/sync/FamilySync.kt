@@ -59,6 +59,8 @@ object FamilySync {
     /** Runs one sync if the device is in a family; returns an error text, or null when it went fine (or is off). */
     suspend fun run(context: Context): String? {
         if (!FirebaseConfig.ready) return null
+        // 🧪 테스트 모드인 기기(부모 폰)의 기록은 올리지 않는다 (아이 기록이 섞이지 않게)
+        if (com.suhwak.app.data.DeviceMode.isTest(context)) return null
         val code = code(context) ?: return null
         android.util.Log.d("WBSync", "waiting")
         return lock.withLock {

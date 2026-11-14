@@ -115,7 +115,7 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
         )
     }
     // Locks again whenever the tab is left, since this state is forgotten then.
-    var unlocked by remember { mutableStateOf(!settings.hasPin) }
+    var unlocked by remember { mutableStateOf(!settings.locked) }
     if (!unlocked) {
         SettingsLock(settings, onUnlocked = { unlocked = true })
         return
@@ -424,7 +424,14 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                     open == "parent", { toggle("parent") },
                 ) {
                     Body {
-                        Text("비밀번호", style = MaterialTheme.typography.bodyLarge)
+                        var testMode by remember { mutableStateOf(settings.testMode) }
+                        SwitchRow(
+                            "🧪 테스트 모드 (이 기기만)",
+                            "부모님 폰용: 잠금 없이 열리고, 풀어 봐도 기록·열매·복습·오답노트가 남지 않아요. 수확 게임은 무제한. " +
+                                "이 표시는 백업·동기화에 들어가지 않아서 아이 기기에는 영향이 없어요",
+                            testMode,
+                        ) { testMode = it; com.suhwak.app.data.DeviceMode.setTest(context, it); saved() }
+                        Text("비밀번호", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp))
                         Text(
                             if (hasPin) "설정을 열 때 비밀번호 4자리를 물어봐요" else "아이가 설정을 바꾸지 못하게 비밀번호를 걸 수 있어요",
                             style = MaterialTheme.typography.bodySmall,

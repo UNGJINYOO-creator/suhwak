@@ -36,6 +36,13 @@ enum class BlankLevel(val label: String) { AUTO("자동"), EASY("쉬움"), NORMA
 /** App-wide study settings, kept in SharedPreferences. */
 class StudySettings(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("study", Context.MODE_PRIVATE)
+    private val appContext = context.applicationContext
+
+    /** 🧪 테스트 모드 (이 기기만, DeviceMode): 잠금 없음, 기록 안 남김, 게임 무제한. */
+    val testMode: Boolean get() = DeviceMode.isTest(appContext)
+
+    /** 잠금을 물어볼지: 비밀번호가 있고 테스트 모드가 아닐 때. */
+    val locked: Boolean get() = hasPin && !testMode
 
     var mode: StudyMode
         get() = runCatching { StudyMode.valueOf(prefs.getString("mode", null)!!) }.getOrDefault(StudyMode.STAGED)

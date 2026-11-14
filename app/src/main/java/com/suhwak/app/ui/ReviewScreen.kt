@@ -397,7 +397,7 @@ private fun RewardPanel(vm: ReviewViewModel) {
     if (toUse >= 0) {
         // Only a parent marks a coupon used, so it asks the settings password when there is one.
         val name = vm.coupons.getOrNull(toUse)?.name ?: ""
-        if (vm.settings.hasPin) {
+        if (vm.settings.locked) {
             PinConfirmDialog(
                 text = "'$name' 쿠폰을 사용 완료로 바꿀까요? 부모님 비밀번호를 입력하세요.",
                 check = vm.settings::checkPin,

@@ -238,6 +238,7 @@ class FishingViewModel(app: Application) : AndroidViewModel(app) {
         val goalWords = settings.dailyWords
         lockReason = when {
             pool.size < 4 -> "문제가 4개 이상 있어야 수확을 할 수 있어요"
+            settings.testMode -> null  // 🧪 테스트 모드: 언제나, 무제한
             goalMinutes > 0 && stats.studyMs < goalMinutes * 60_000L ->
                 "오늘 학습 시간 ${goalMinutes}분을 채우면 열려요 (지금 ${stats.studyMs / 60_000}분)"
             goalMinutes <= 0 && goalWords > 0 && stats.learnedCount < goalWords ->

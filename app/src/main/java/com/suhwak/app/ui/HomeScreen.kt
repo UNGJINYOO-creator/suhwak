@@ -190,6 +190,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var wrongCount by mutableIntStateOf(0)
         private set
+    var testMode by mutableStateOf(false)
+        private set
     /** 오늘 간격 복습할 유형 수 (유형 단위 복습). */
     var typeDue by mutableIntStateOf(0)
         private set
@@ -235,8 +237,11 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         typeDue = if (settings.reviewDaily > 0) minOf(com.suhwak.app.data.TypeReview(getApplication()).dueToday().size, settings.reviewDaily) else 0
         val timeLeft = settings.dailyGoalMinutes > 0 && stats.studyMs < settings.dailyGoalMinutes * 60_000L
         val wordsLeft = settings.dailyGoalMinutes <= 0 && settings.dailyWords > 0 && stats.learnedCount < settings.dailyWords
-        fishOpen = !timeLeft && !wordsLeft && fishing.triesLeft > 0
+        testMode = settings.testMode
+        // 🧪 테스트 모드: 게임은 목표와 상관없이 언제나, 무제한
+        fishOpen = testMode || (!timeLeft && !wordsLeft && fishing.triesLeft > 0)
         fishLine = when {
+            testMode -> "🧪 테스트 모드: 언제나 열려요"
             timeLeft || wordsLeft -> "🔒 오늘 목표를 채우면 열려요"
             fishing.caughtToday -> "오늘 ${fishing.caughtFishToday} 수확했어요! 🧺"
             fishing.triesLeft <= 0 -> "내일 또 수확하러 와요 🧺"
@@ -446,7 +451,7 @@ fun HomeScreen(
     var unlocked by remember { mutableStateOf(false) }
     var pending by remember { mutableStateOf<(() -> Unit)?>(null) }
     val guard: (() -> Unit) -> Unit = { action ->
-        if (!vm.settings.hasPin || unlocked) action() else pending = action
+        if (!vm.settings.locked || unlocked) action() else pending = action
     }
     var showNewDeck by rememberSaveable { mutableStateOf(false) }
     var showImport by rememberSaveable { mutableStateOf(false) }
@@ -672,6 +677,14 @@ fun HomeScreen(
         ) {
             item(key = "top", span = { GridItemSpan(maxLineSpan) }) {
                 HomeHeader(vm.level, vm.known, vm.total, vm.stars, vm.totalMs)
+                if (vm.testMode) {
+                    Text(
+                        "🧪 테스트 모드 · 이 기기는 잠금 없음, 기록이 남지 않아요 (설정 > 비밀번호와 보상에서 끄기)",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Sea.FruitText,
+                        modifier = Modifier.padding(top = 2.dp, start = 4.dp).clip(RoundedCornerShape(10.dp)).background(Sea.FruitSoft).padding(horizontal = 10.dp, vertical = 6.dp),
+                    )
+                }
             }
             if (wide) {
                 item(key = "wide", span = { GridItemSpan(maxLineSpan) }) {
@@ -828,7 +841,7 @@ fun HomeScreen(
     }
     deckToDelete?.let { deck ->
         // With a settings password, deleting a deck asks for it too, so a child can't delete one by accident.
-        if (vm.settings.hasPin) {
+        if (vm.settings.locked) {
             PinConfirmDialog(
                 text = "'${deck.name}' 문제집과 문제 ${deck.wordCount}개를 삭제하려면 비밀번호를 입력하세요.",
                 check = vm.settings::checkPin,
