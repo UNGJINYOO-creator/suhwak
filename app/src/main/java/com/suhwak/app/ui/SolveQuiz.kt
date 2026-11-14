@@ -240,10 +240,10 @@ Text(if (stage == 2 && !clozeDone) "빈칸을 먼저 채워요" else "🍎 수�
             // 태블릿: 왼쪽 문제, 오른쪽 답 (채점하기는 오른쪽 아래에 고정)
             // 아주 넓은 화면(가로 태블릿): 답 쪽은 숫자판이 쓰기 좋은 폭(440dp)으로 두고 나머지는 모두 문제·풀이에
             val roomy = maxWidth >= 1000.dp
+            val boxHeight = maxHeight
             Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(if (roomy) 28.dp else 18.dp)) {
                 // 왼쪽: 위에 문제(·힌트·빈칸 풀이), 아래 남은 높이 전부 풀이 칸 (펜으로 식을 쓰며 푼다)
                 val heavy = stage == 2 || (stage == 3 && tries >= 3)
-                val boxHeight = maxHeight
                 Column(
                     Modifier.weight(1.15f).fillMaxHeight().padding(horizontal = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),

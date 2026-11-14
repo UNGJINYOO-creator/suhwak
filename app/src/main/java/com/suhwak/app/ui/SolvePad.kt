@@ -25,6 +25,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
@@ -55,6 +56,7 @@ private val RuleLine = Color(0xFFE3EAD2)
  *  - 펜(스타일러스)을 한 번 쓰면 그 뒤로 손가락·손바닥 터치는 무시한다 (손을 대고 써도 되게)
  *  - 공책처럼 옅은 줄
  */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun SolvePad(key: Any, onActivity: () -> Unit, modifier: Modifier = Modifier) {
     val strokes = remember(key) { mutableStateListOf<InkStroke>() }
