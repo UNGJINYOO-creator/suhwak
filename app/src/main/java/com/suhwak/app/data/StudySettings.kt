@@ -157,6 +157,26 @@ class StudySettings(context: Context) {
         get() = prefs.getInt("wrongClearDays", 3)
         set(v) = prefs.edit().putInt("wrongClearDays", v).apply()
 
+    /** 약점 맞춤: 오늘 새 문제 중 약한 유형 문제의 비율 % (0 = 끔, 기본 50). */
+    var weakShare: Int
+        get() = prefs.getInt("weakShare", 50)
+        set(v) = prefs.edit().putInt("weakShare", v).apply()
+
+    /** 약점 맞춤: 정답률이 이만큼(%) 안 되면 약한 유형 (기본 70). */
+    var weakBelow: Int
+        get() = prefs.getInt("weakBelow", 70)
+        set(v) = prefs.edit().putInt("weakBelow", v).apply()
+
+    /** 약점 맞춤: 최근 며칠의 답으로 정답률을 잴지 (기본 14일). */
+    var weakWindow: Int
+        get() = prefs.getInt("weakWindow", 14)
+        set(v) = prefs.edit().putInt("weakWindow", v).apply()
+
+    /** 약점 맞춤: 적어도 이만큼 푼 유형만 잰다 (기본 3문제). */
+    var weakMin: Int
+        get() = prefs.getInt("weakMin", 3)
+        set(v) = prefs.edit().putInt("weakMin", v).apply()
+
     /** Questions in 시험 모드. */
     var testSize: Int
         get() = prefs.getInt("testSize", 20)

@@ -130,6 +130,7 @@ import com.suhwak.app.data.Weakness
 import com.suhwak.app.data.MasterCheck
 import com.suhwak.app.data.WrongNote
 import com.suhwak.app.data.WeakTypes
+import com.suhwak.app.data.TypeStats
 import com.suhwak.app.data.Word
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -348,12 +349,41 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
                 }
                 test -> (if (deckId > 0) dao.getWords(deckId) else all).filter { !it.excluded }.shuffled().take(settings.testSize)
                 today -> {
-                    // 약점 맞춤: among the next new words, the weak part of speech comes first.
                     val limit = newPerDay(settings)
                     val fresh = dao.getNewWords(limit * 3)
-                    val weakPos = weakness.pos
-                    val picked = if (weakPos == null) fresh.take(limit)
-                    else (fresh.filter { it.pos == weakPos }.take(limit / 2) + fresh).distinctBy { it.id }.take(limit)
+                    // 약점 맞춤 (수학): 최근 정답률이 낮은 유형들의 쌍둥이를 오늘 새 문제의 weakShare%만큼, 유형을 돌아가며 섞는다
+                    val weakTypes = if (settings.weakShare > 0) {
+                        TypeStats.weak(TypeStats.lastDays(answerLog, settings.weakWindow), settings.weakMin, settings.weakBelow).map { it.concept }
+                    } else emptyList()
+                    val picked = if (weakTypes.isNotEmpty()) {
+                        val want = ((limit * settings.weakShare + 99) / 100).coerceAtMost(limit)
+                        val weakPicks = mutableListOf<Word>()
+                        val skip = mutableSetOf<Long>()
+                        while (weakPicks.size < want) {
+                            val before = weakPicks.size
+                            for (c in weakTypes) {
+                                if (weakPicks.size >= want) break
+                                val p = twinCandidates(c, skip).firstOrNull() ?: continue
+                                weakPicks += p; skip += p.id
+                                badges[p.id] = "💪 약점 유형"
+                            }
+                            if (weakPicks.size == before) break
+                        }
+                        // 약점 문제와 보통 문제를 번갈아 (한쪽이 모자라면 다른 쪽으로 채움)
+                        val normal = fresh.filter { it.id !in skip }.take(limit - weakPicks.size)
+                        val mixed = mutableListOf<Word>()
+                        val wi = weakPicks.iterator(); val ni = normal.iterator()
+                        while (wi.hasNext() || ni.hasNext()) {
+                            if (wi.hasNext()) mixed += wi.next()
+                            if (ni.hasNext()) mixed += ni.next()
+                        }
+                        mixed
+                    } else {
+                        // 영어 단어: 가장 약한 품사를 먼저
+                        val weakPos = weakness.pos
+                        if (weakPos == null) fresh.take(limit)
+                        else (fresh.filter { it.pos == weakPos }.take(limit / 2) + fresh).distinctBy { it.id }.take(limit)
+                    }
                     dao.getDueWords(System.currentTimeMillis()) + picked
                 }
                 allDecks -> all.filter { !it.excluded }.let { w -> w.filter { !it.mastered }.ifEmpty { w } }

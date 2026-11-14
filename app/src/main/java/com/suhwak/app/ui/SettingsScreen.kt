@@ -217,6 +217,10 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                 var reviewDays by remember { mutableStateOf(settings.reviewDays) }
                 var editDays by remember { mutableStateOf(false) }
                 var wrongEnter by remember { mutableIntStateOf(settings.wrongEnter) }
+                var weakShare by remember { mutableIntStateOf(settings.weakShare) }
+                var weakBelow by remember { mutableIntStateOf(settings.weakBelow) }
+                var weakWindow by remember { mutableIntStateOf(settings.weakWindow) }
+                var weakMin by remember { mutableIntStateOf(settings.weakMin) }
                 var wrongClear by remember { mutableIntStateOf(settings.wrongClearDays) }
                 var shuffle by remember { mutableStateOf(settings.shuffle) }
                 var backFirst by remember { mutableStateOf(settings.backFirst) }
@@ -285,6 +289,20 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                                         .takeIf { cur -> Opt.reviewDays.none { it.first == cur.first } },
                                 )) { reviewDays = it; settings.reviewDays = it }
                                 TextButton(onClick = { editDays = true }) { Text("직접 정하기") }
+                            }
+                        }
+                        Labeled("약점 맞춤", "최근 정답률이 낮은 유형의 문제를 오늘 새 문제에 이만큼 섞어요 (유형을 돌아가며)") {
+                            NumberChoice(weakShare, Opt.weakShare, "%", 100, min = 0) { weakShare = it; settings.weakShare = it }
+                        }
+                        if (weakShare > 0) {
+                            Labeled("약한 유형 기준", "1차 정답률이 이만큼 안 되는 유형") {
+                                NumberChoice(weakBelow, Opt.weakBelow, "%", 100) { weakBelow = it; settings.weakBelow = it }
+                            }
+                            Labeled("정답률을 잴 기간") {
+                                NumberChoice(weakWindow, Opt.weakWindow, "일", 35) { weakWindow = it; settings.weakWindow = it }
+                            }
+                            Labeled("적어도 푼 문제 수", "이만큼 풀어 본 유형만 정답률을 재요") {
+                                NumberChoice(weakMin, Opt.weakMin, "문제", 20) { weakMin = it; settings.weakMin = it }
                             }
                         }
                         Labeled("오답노트에 넣기", "한 문제를 이만큼 틀리면 오답노트에 들어가요 (1차·2차에 틀린 수를 더해요, 3차까지 가면 2번)") {
