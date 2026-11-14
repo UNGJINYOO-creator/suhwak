@@ -50,9 +50,29 @@ object ProgressReset {
             daily.edit().putString("learned", daily.getString("learned", "")!!.split(',').filter { it.isNotBlank() && it !in ids }.joinToString(",")).apply()
             val wrong = prefs(context, "wrongNote")
             wrong.edit().putString("words", wrong.getString("words", "")!!.split(',').filter { it.isNotBlank() && it.substringBefore(':') !in ids }.joinToString(",")).apply()
+            // 새 형식(JSON "note")에서도 빼기
+            wrong.getString("note", null)?.let { raw ->
+                runCatching {
+                    val o = org.json.JSONObject(raw)
+                    ids.forEach { o.remove(it) }
+                    wrong.edit().putString("note", o.toString()).apply()
+                }
+            }
+            // 유형 단위 간격 복습·다시 볼 유형: 초기화한 문제들의 유형을 뺀다
+            val concepts = words.filter { it.isSeed }.map { it.pos }.filter { it.isNotBlank() }.toSet()
+            listOf("typeReview", "weakTypes").forEach { file ->
+                val p = prefs(context, file)
+                p.getString("types", null)?.let { raw ->
+                    runCatching {
+                        val o = org.json.JSONObject(raw)
+                        concepts.forEach { o.remove(it) }
+                        p.edit().putString("types", o.toString()).apply()
+                    }
+                }
+            }
             val check = prefs(context, "masterCheck")
             check.edit().putStringSet("ids", check.getStringSet("ids", emptySet())!! - ids).apply()
-            touched += listOf("history", "daily", "wrongNote", "masterCheck")
+            touched += listOf("history", "daily", "wrongNote", "masterCheck", "typeReview", "weakTypes")
         }
         if (choice.fish) {
             prefs(context, "game").edit().remove("earned").remove("spent").remove("coupons").remove("badges").apply()
@@ -94,7 +114,7 @@ object ProgressReset {
         val mark = undoMark(context)
         if (!mark.exists()) return
         val at = mark.readText().toLongOrNull() ?: System.currentTimeMillis()
-        listOf("game", "giant", "fishing", "daily", "history", "wrongNote", "masterCheck").forEach {
+        listOf("game", "giant", "fishing", "daily", "history", "wrongNote", "masterCheck", "typeReview", "weakTypes").forEach {
             prefs(context, it).edit().putLong("resetAt", at).commit()
         }
         FamilySync.code(context)?.let { FamilySync.connect(context, it) }

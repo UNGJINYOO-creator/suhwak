@@ -295,6 +295,8 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
     private val twinOf = mutableMapOf<Long, TwinChain>()
     /** 이번 씨앗을 몇 차에 맞혔는지 (1, 2, 3, 풀이를 보고 맞히면 4). */
     private var solveTries = 0
+    /** 이번 씨앗에서 틀린 답들 (1차·2차), 오답노트에 같이 저장. */
+    private var solveWrongs = listOf<String>()
     var twinsServed by mutableStateOf(0)
         private set
     var twinsPassed by mutableStateOf(0)
@@ -331,7 +333,19 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
             allSeeds = all.filter { it.isSeed && !it.excluded }
             sessionWords = when {
                 review -> dao.getDueWords(System.currentTimeMillis())
-                wrongOnly -> wrongNote.ids.let { ids -> all.filter { it.id in ids && !it.excluded } }
+                wrongOnly -> {
+                    // 수학 씨앗은 오답노트 문제 그대로가 아니라 같은 유형의 쌍둥이(숫자만 바꾼 문제)를 낸다 — 답을 외워 맞히지 않게
+                    val ids = wrongNote.ids
+                    val inNote = all.filter { it.id in ids && !it.excluded }
+                    val used = mutableSetOf<Long>()
+                    inNote.map { w ->
+                        val twin = if (w.isSeed && w.pos.isNotBlank()) twinCandidates(w.pos, ids + used).firstOrNull() else null
+                        (twin ?: w).also { t ->
+                            used += t.id
+                            if (twin != null) badges[t.id] = "📒 오답 쌍둥이"
+                        }
+                    }.distinctBy { it.id }
+                }
                 test -> (if (deckId > 0) dao.getWords(deckId) else all).filter { !it.excluded }.shuffled().take(settings.testSize)
                 today -> {
                     // 약점 맞춤: among the next new words, the weak part of speech comes first.
@@ -738,9 +752,10 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
     }
 
     /** 씨앗 풀기 결과: 몇 차에 맞혔는지(1, 2, 3). 1차만 '한 번에 맞힘'. 다음 문제를 누르면 [next]로 기록된다. */
-    fun solveAnswered(tries: Int, response: String) {
+    fun solveAnswered(tries: Int, response: String, wrongs: List<String> = emptyList()) {
         touch()
         solveTries = tries
+        solveWrongs = wrongs
         answered = tries == 1
         lastResponse = response
         answerMs = System.currentTimeMillis() - questionAt
@@ -784,9 +799,19 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
             )
         }
         if (mode != StudyMode.CARD && !guessed) {
-            when (wrongNote.record(word.id, answer != Answer.UNKNOWN)) {
+            // 수학 씨앗: 1차·2차에 틀린 만큼 (3차까지 가면 2번 틀림), 틀린 답도 같이 저장
+            val noted = if (mode == StudyMode.SOLVE) wrongNote.record(word.id, (solveTries - 1).coerceIn(0, 3), solveWrongs)
+            else wrongNote.record(word.id, answer != Answer.UNKNOWN)
+            when (noted) {
                 1 -> celebrate("📒 오답노트에 추가", sound = false)
                 -1 -> celebrate("오답노트 졸업! 👏")
+            }
+            // 오답노트의 같은 유형 문제들: 이 문제가 그 유형의 쌍둥이 (1차에 맞힌 날을 세고, 3차까지 가면 0부터)
+            if (mode == StudyMode.SOLVE && word.pos.isNotBlank()) {
+                val inNote = wrongNote.ids
+                val typeOf = allSeeds.filter { it.id in inNote }.associate { it.id to it.pos }
+                val left = wrongNote.recordType(word.pos, word.id, firstTry = solveTries == 1, failed = solveTries >= 3, typeOf = typeOf)
+                if (left > 0) celebrate("📒 쌍둥이로 확인! 오답노트 ${left}문제 졸업 👏")
             }
             stats.recordAnswer(word.text, answer != Answer.UNKNOWN)
             // A word answered right for the first time today is one fish caught.

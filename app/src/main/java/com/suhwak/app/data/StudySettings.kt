@@ -147,6 +147,16 @@ class StudySettings(context: Context) {
         get() = prefs.getInt("reviewDaily", 10)
         set(v) = prefs.edit().putInt("reviewDaily", v).apply()
 
+    /** 오답노트: 이만큼 틀리면 들어감 (수학은 1차·2차에 틀린 수를 더함, 기본 2). */
+    var wrongEnter: Int
+        get() = prefs.getInt("wrongEnter", 2)
+        set(v) = prefs.edit().putInt("wrongEnter", v).apply()
+
+    /** 오답노트: 같은 유형 쌍둥이를 1차에 맞힌 날이 서로 다른 날로 이만큼 쌓이면 빠짐 (기본 3일). */
+    var wrongClearDays: Int
+        get() = prefs.getInt("wrongClearDays", 3)
+        set(v) = prefs.edit().putInt("wrongClearDays", v).apply()
+
     /** Questions in 시험 모드. */
     var testSize: Int
         get() = prefs.getInt("testSize", 20)

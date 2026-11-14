@@ -78,7 +78,7 @@ const val SOLVE_FAST_MS = 10_000L
 fun SolveQuiz(
     word: Word,
     number: Int,
-    onAnswered: (tries: Int, response: String) -> Unit,
+    onAnswered: (tries: Int, response: String, wrongs: List<String>) -> Unit,
     onNext: () -> Unit,
     onActivity: () -> Unit,
     modifier: Modifier = Modifier,
@@ -103,8 +103,14 @@ fun SolveQuiz(
     var useKeyboard by remember(word.id) { mutableStateOf(false) }
     var askFast by remember(word.id) { mutableStateOf(false) }
     var copied by remember(word.id) { mutableStateOf(notebook.isCopied(word.id)) }
+    // 틀린 답들 (오답노트에 저장해서 부모가 본다). 객관식은 "③ x ≥ -4"처럼 보기 글자까지
+    val wrongs = remember(word.id) { mutableListOf<String>() }
     val response = if (mc) picked?.toString().orEmpty() else typed.trim()
     val canAnswer = stage < 2 || (stage == 2 && clozeDone)
+
+    fun shownAnswer(): String =
+        if (mc) picked?.let { i -> "${CIRCLES.getOrElse(i - 1) { '?' }} ${com.suhwak.app.data.MathText.plain(choices.getOrElse(i - 1) { "" })}".trim() }.orEmpty()
+        else typed.trim()
 
     fun harvest() {
         onActivity()
@@ -113,13 +119,15 @@ fun SolveQuiz(
             right -> {
                 tries = if (explained) 4 else stage + 1
                 stage = 3
-                onAnswered(tries, response)
+                onAnswered(tries, response, wrongs.toList())
             }
             stage == 0 -> {
+                wrongs += shownAnswer()
                 stage = 1
                 picked = null
             }
             stage == 1 -> {
+                wrongs += shownAnswer()
                 stage = 2
                 picked = null
                 typed = ""

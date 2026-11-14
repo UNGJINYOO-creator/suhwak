@@ -44,7 +44,9 @@ class WrongNoteViewModel(app: Application) : AndroidViewModel(app) {
     val settings = StudySettings(app)
 
     /** A word in the note, with how often it was missed and how far it is from leaving. */
-    data class Row(val word: Word, val deck: String, val misses: Int, val streak: Int, val copied: Boolean = false)
+    data class Row(val word: Word, val deck: String, val misses: Int, val streak: Int, val copied: Boolean = false, val answers: List<String> = emptyList())
+
+    val clearAfter: Int get() = note.clearAfter
 
     var rows by mutableStateOf<List<Row>?>(null)
         private set
@@ -53,7 +55,7 @@ class WrongNoteViewModel(app: Application) : AndroidViewModel(app) {
         val entries = note.entries
         val decks = dao.getAllDecks().associate { it.id to it.name }
         rows = dao.getAllWords().filter { it.id in entries && !it.excluded }
-            .map { w -> entries.getValue(w.id).let { (m, s) -> Row(w, decks[w.deckId] ?: "", m, s, notebook.isCopied(w.id)) } }
+            .map { w -> entries.getValue(w.id).let { e -> Row(w, decks[w.deckId] ?: "", e.misses, e.days, notebook.isCopied(w.id), e.answers) } }
             .sortedWith(compareByDescending<Row> { it.misses }.thenBy { it.word.text.lowercase() })
     }
 
@@ -89,7 +91,8 @@ fun WrongNoteScreen(onBack: () -> Unit, onStudy: () -> Unit, vm: WrongNoteViewMo
         if (rows == null) return@Scaffold
         Column(Modifier.fillMaxSize().padding(padding)) {
             Text(
-                "2번 틀린 문제가 모여요. 바른 풀이를 공책에 옮겨 적고, 연속 ${WrongNote.CLEAR_STREAK}번 맞히면 빠져요.",
+                "${vm.settings.wrongEnter}번 틀린 문제가 모여요. 바른 풀이를 공책에 옮겨 적고, 같은 유형 쌍둥이 문제를 " +
+                    "서로 다른 날 ${vm.clearAfter}번 1차에 맞히면 빠져요.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.outline,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
@@ -108,21 +111,30 @@ fun WrongNoteScreen(onBack: () -> Unit, onStudy: () -> Unit, vm: WrongNoteViewMo
                         headlineContent = {
                             if (c == ListCover.WORD) CoverBar() else Text(w.text, style = MaterialTheme.typography.titleMedium)
                         },
+                        overlineContent = if (w.isSeed && w.pos.isNotBlank()) ({ Text(w.pos) }) else null,
                         supportingContent = {
                             Column {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    PosBadge(w.pos, Modifier.padding(end = 6.dp))
-                                    if (c == ListCover.MEANING) CoverBar(width = 120) else Text(w.meaning)
+                                    if (!w.isSeed) PosBadge(w.pos, Modifier.padding(end = 6.dp))
+                                    if (c == ListCover.MEANING) CoverBar(width = 120) else Text(if (w.isSeed) "정답 ${w.meaning}" else w.meaning)
                                 }
                                 Text(
                                     listOf(
                                         r.deck.takeIf { it.isNotBlank() },
                                         "${r.misses}번 틀림",
-                                        "빠지기까지 ${WrongNote.CLEAR_STREAK - r.streak}번 더 맞히기",
+                                        "빠지기까지 ${(vm.clearAfter - r.streak).coerceAtLeast(1)}일 더 맞히기",
                                     ).filterNotNull().joinToString(" · "),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.outline,
                                 )
+                                // 틀린 답 (부모 확인용): 날짜와 그때 쓴 답
+                                if (r.answers.isNotEmpty()) {
+                                    Text(
+                                        "✏️ 틀린 답: " + r.answers.joinToString(" · "),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = androidx.compose.ui.graphics.Color(0xFFA9481B),
+                                    )
+                                }
                                 if (w.isSeed) {
                                     androidx.compose.material3.FilterChip(
                                         selected = r.copied,

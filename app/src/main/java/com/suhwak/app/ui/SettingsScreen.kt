@@ -216,6 +216,8 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                 var reviewDaily by remember { mutableIntStateOf(settings.reviewDaily) }
                 var reviewDays by remember { mutableStateOf(settings.reviewDays) }
                 var editDays by remember { mutableStateOf(false) }
+                var wrongEnter by remember { mutableIntStateOf(settings.wrongEnter) }
+                var wrongClear by remember { mutableIntStateOf(settings.wrongClearDays) }
                 var shuffle by remember { mutableStateOf(settings.shuffle) }
                 var backFirst by remember { mutableStateOf(settings.backFirst) }
                 var textScale by remember { mutableStateOf(settings.textScale) }
@@ -284,6 +286,12 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                                 )) { reviewDays = it; settings.reviewDays = it }
                                 TextButton(onClick = { editDays = true }) { Text("직접 정하기") }
                             }
+                        }
+                        Labeled("오답노트에 넣기", "한 문제를 이만큼 틀리면 오답노트에 들어가요 (1차·2차에 틀린 수를 더해요, 3차까지 가면 2번)") {
+                            NumberChoice(wrongEnter, Opt.wrongEnter, "번", 5) { wrongEnter = it; settings.wrongEnter = it }
+                        }
+                        Labeled("오답노트에서 빼기", "같은 유형 쌍둥이 문제를 1차에 맞힌 날이 서로 다른 날로 이만큼 쌓이면 빠져요") {
+                            NumberChoice(wrongClear, Opt.wrongClearDays, "일", 14) { wrongClear = it; settings.wrongClearDays = it }
                         }
                         Labeled("다시 볼 유형", "쌍둥이에서도 틀린 유형을 다음 날부터 하루에 이만큼 다시 내요") {
                             NumberChoice(weakDaily, Opt.weakDaily, "문제", 5, min = 0) { weakDaily = it; settings.weakDaily = it }
