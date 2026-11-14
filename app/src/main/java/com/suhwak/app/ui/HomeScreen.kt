@@ -192,6 +192,12 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var testMode by mutableStateOf(false)
         private set
+    var examTotal by mutableIntStateOf(0)
+        private set
+    var examConquered by mutableIntStateOf(0)
+        private set
+    var examNext by mutableStateOf<ExamUnit?>(null)
+        private set
     /** 오늘 간격 복습할 유형 수 (유형 단위 복습). */
     var typeDue by mutableIntStateOf(0)
         private set
@@ -260,7 +266,14 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             level = game.level
             stars = game.stars
         }
-        viewModelScope.launch { giant = giantStore.state(dao.getAllWords(), stats.learnedToday) }
+        viewModelScope.launch {
+            // ⚔️ 단원 정복: 아직 정복 못 한 첫 단원(다음 보스)과 정복한 단원 수
+            val units = ExamHubViewModel.unitsOf(dao.getAllDecks().associate { it.id to it.name }, dao.getAllWords(), com.suhwak.app.data.UnitExam(getApplication()))
+            val conquer = settings.examConquer
+            examTotal = units.size
+            examConquered = units.count { it.record.best >= conquer }
+            examNext = units.firstOrNull { it.record.best < conquer }
+        }
     }
 
     fun setSort(s: DeckSort) {
@@ -438,6 +451,7 @@ fun HomeScreen(
     onWrongNote: () -> Unit,
     onWrongList: () -> Unit,
     onFishing: (giant: Boolean) -> Unit,
+    onExams: () -> Unit = {},
     vm: HomeViewModel = viewModel(),
 ) {
     val context = LocalContext.current
@@ -604,34 +618,24 @@ fun HomeScreen(
                     Text(vm.fishLine, style = MaterialTheme.typography.bodySmall, color = ink, modifier = Modifier.padding(top = 4.dp))
                 }
             }
-            vm.giant?.let { g ->
-                val f = g.fish
-                Card(
-                    onClick = { onFishing(true) },
-                    shape = MaterialTheme.shapes.large,
-                    colors = CardDefaults.cardColors(containerColor = com.suhwak.app.ui.theme.Sea.Lavender),
-                    modifier = Modifier.weight(1f).fillMaxHeight(),
-                ) {
-                    Column(Modifier.padding(14.dp)) {
-                        Text("⛵", fontSize = 26.sp)
-                        FitText("대양 원정", MaterialTheme.typography.titleMedium.copy(color = com.suhwak.app.ui.theme.Sea.Ink, fontWeight = FontWeight.Bold), align = TextAlign.Start)
-                        if (f == null) {
-                            Text("18개 완성! 🏆", style = MaterialTheme.typography.bodySmall, color = com.suhwak.app.ui.theme.Sea.Ink)
-                        } else {
-                            FitText("${f.ocean.title} · ${f.emoji} ${f.name}", MaterialTheme.typography.bodySmall.copy(color = com.suhwak.app.ui.theme.Sea.Soft), align = TextAlign.Start)
-                            Spacer(Modifier.height(6.dp))
-                            ThickProgress(g.hit / g.total.coerceAtLeast(1).toFloat(), Modifier.fillMaxWidth())
-                            Text(
-                                when {
-                                    g.ready -> "100칸 완성! 최종전 🏆"
-                                    g.pending > 0 -> "${g.hit}/${g.total}칸 · 오늘 +${g.pending}"
-                                    else -> "${g.hit}/${g.total}칸"
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (g.ready || g.pending > 0) com.suhwak.app.ui.theme.Sea.Warm else com.suhwak.app.ui.theme.Sea.Soft,
-                                modifier = Modifier.padding(top = 4.dp),
-                            )
-                        }
+            // ⚔️ 단원 정복 (단원 종합시험): 다음 보스와 최고 점수
+            Card(
+                onClick = onExams,
+                shape = MaterialTheme.shapes.large,
+                colors = CardDefaults.cardColors(containerColor = Sea.Lavender),
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+            ) {
+                Column(Modifier.padding(14.dp)) {
+                    Text("⚔️", fontSize = 26.sp)
+                    FitText("단원 정복", MaterialTheme.typography.titleMedium.copy(color = Sea.Ink, fontWeight = FontWeight.Bold), align = TextAlign.Start)
+                    val next = vm.examNext
+                    if (vm.examTotal > 0 && next == null) {
+                        Text("모든 단원 정복! 👑 점수를 더 올려 봐요", style = MaterialTheme.typography.bodySmall, color = Sea.Ink)
+                    } else if (next != null) {
+                        FitText("${next.unit}단원 보스 · 최고 ${next.record.best}점", MaterialTheme.typography.bodySmall.copy(color = Sea.Soft), align = TextAlign.Start)
+                        Spacer(Modifier.height(6.dp))
+                        ThickProgress(next.record.hp / 100f, Modifier.fillMaxWidth())
+                        Text("정복 ${vm.examConquered}/${vm.examTotal}단원 · 100점 만점 시험", style = MaterialTheme.typography.bodySmall, color = Sea.Soft, modifier = Modifier.padding(top = 4.dp))
                     }
                 }
             }

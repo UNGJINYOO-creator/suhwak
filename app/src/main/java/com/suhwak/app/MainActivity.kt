@@ -193,6 +193,17 @@ private fun AppContent() {
                                 onWrongNote = { nav.navigate("study/-1?wrong=true") },
                                 onWrongList = { nav.navigate("wrongnote") },
                                 onFishing = { giant -> nav.navigate(if (giant) "fishing?giant=true" else "fishing") },
+                                onExams = { nav.navigate("exams") },
+                            )
+                        }
+                        // ⚔️ 단원 정복: 단원 종합시험 (100점 만점, 최고 점수 = 깎은 보스 체력)
+                        composable("exams") {
+                            com.suhwak.app.ui.ExamHubScreen(onBack = { nav.popBackStack() }, onStart = { u -> nav.navigate("exam/$u") })
+                        }
+                        composable("exam/{unit}", arguments = listOf(navArgument("unit") { type = NavType.IntType })) {
+                            com.suhwak.app.ui.ExamScreen(
+                                onBack = { nav.popBackStack() },
+                                onRetry = { u -> nav.navigate("exam/$u") { popUpTo("exams") } },
                             )
                         }
                         composable("review") {

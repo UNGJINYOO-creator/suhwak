@@ -210,6 +210,16 @@ class StudySettings(context: Context) {
         else -> guessNormalTenths
     }
 
+    /** 단원 종합시험(단원 정복) 문제 수 (기본 20). */
+    var examSize: Int
+        get() = prefs.getInt("examSize", 20)
+        set(v) = prefs.edit().putInt("examSize", v).apply()
+
+    /** 단원 정복: 최고 점수가 이 점수 이상이면 그 단원 보스를 정복 (기본 90점). */
+    var examConquer: Int
+        get() = prefs.getInt("examConquer", 90)
+        set(v) = prefs.edit().putInt("examConquer", v).apply()
+
     /** Questions in 시험 모드. */
     var testSize: Int
         get() = prefs.getInt("testSize", 20)

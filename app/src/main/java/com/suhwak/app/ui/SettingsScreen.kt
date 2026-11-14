@@ -217,6 +217,8 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                 var reviewDays by remember { mutableStateOf(settings.reviewDays) }
                 var editDays by remember { mutableStateOf(false) }
                 var wrongEnter by remember { mutableIntStateOf(settings.wrongEnter) }
+                var examSize by remember { mutableIntStateOf(settings.examSize) }
+                var examConquer by remember { mutableIntStateOf(settings.examConquer) }
                 var weakShare by remember { mutableIntStateOf(settings.weakShare) }
                 var weakBelow by remember { mutableIntStateOf(settings.weakBelow) }
                 var weakWindow by remember { mutableIntStateOf(settings.weakWindow) }
@@ -331,6 +333,12 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                                     reviewDays = v; settings.reviewDays = v; editDays = false
                                 },
                             )
+                        }
+                        Labeled("⚔️ 단원 종합시험 문제 수", "단원 정복 시험: 그 단원의 유형마다 골고루 이만큼, 100점 만점") {
+                            NumberChoice(examSize, Opt.examSize, "문제", 50) { examSize = it; settings.examSize = it }
+                        }
+                        Labeled("⚔️ 정복 점수", "단원 시험 최고 점수가 이만큼이면 그 단원 보스 정복") {
+                            NumberChoice(examConquer, Opt.examConquer, "점", 100) { examConquer = it; settings.examConquer = it }
                         }
                         Labeled("시험 문제 수") {
                             NumberChoice(testSize, Opt.test, "문제", 200) { testSize = it; settings.testSize = it }

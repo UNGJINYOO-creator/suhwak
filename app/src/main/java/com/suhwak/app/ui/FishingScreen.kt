@@ -538,7 +538,7 @@ fun FishingScreen(onBack: () -> Unit, onMoreWords: () -> Unit = {}, giantOnly: B
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로") }
                 },
-                actions = { TextButton(onClick = { showBook = true }) { Text("📖 도감") } },
+                // 수확중: 도감은 쓰지 않는다 (수학은 모으기보다 점수·반복)
             )
         },
     ) { padding ->
@@ -704,10 +704,7 @@ private fun Intro(vm: FishingViewModel, onBook: () -> Unit, onLog: () -> Unit) {
             PrimaryButton("🧺 수확 시작" + f.triesNote, { vm.start(false) })
         }
         Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SecondaryButton("📅 수확 일지", onLog, Modifier.weight(1f))
-            SecondaryButton("📖 도감", onBook, Modifier.weight(1f))
-        }
+        SecondaryButton("📅 수확 일지", onLog)
     }
 }
 
@@ -903,7 +900,7 @@ private fun Result(vm: FishingViewModel, won: Boolean, onBack: () -> Unit, onBoo
             Text(giantFish.english, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.outline)
             Spacer(Modifier.height(8.dp))
             Text("💡 ${giantFish.fact}", style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
-            Text("선물 열매 ${vm.catchStars}개를 받았어요 🍎 · 도감에 올렸어요", style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
+            Text("선물 열매 ${vm.catchStars}개를 받았어요 🍎", style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
         } else if (won) {
             Text("${vm.fish.name} ${Fishing.formatKg(vm.kg)}!", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Text(
@@ -915,7 +912,7 @@ private fun Result(vm: FishingViewModel, won: Boolean, onBack: () -> Unit, onBoo
             Text("선물 열매 ${vm.catchStars}개를 받았어요 🍎" + if (vm.newSea) " (새 문제 보너스!)" else "", style = MaterialTheme.typography.bodyLarge)
             if (vm.seaCompleted) {
                 Text(
-                    "🎉 ${vm.sea.title} 도감 완성! 선물 열매 ${Fishing.SEA_GIFT}개 더",
+                    "🎉 ${vm.sea.title} 모두 수확! 선물 열매 ${Fishing.SEA_GIFT}개 더",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary,
                     textAlign = TextAlign.Center,
@@ -957,7 +954,6 @@ private fun Result(vm: FishingViewModel, won: Boolean, onBack: () -> Unit, onBoo
             SecondaryButton(if (won) "🧺 한 번 더" else "🧺 다시 도전", { vm.start() })
             Spacer(Modifier.height(8.dp))
         }
-        SecondaryButton("📖 열매 도감", onBook)
         Spacer(Modifier.height(8.dp))
         SecondaryButton("홈으로", onBack)
     }
@@ -982,7 +978,7 @@ private fun SeaPicker(vm: FishingViewModel) {
                     val color = if (chosen) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
                     FitText("${s.emoji} ${s.title}", MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = color), align = TextAlign.Start)
                     FitText(s.note, MaterialTheme.typography.labelSmall.copy(color = color), align = TextAlign.Start)
-                    Text("도감 ${vm.fishing.collected(s)}/$kinds", style = MaterialTheme.typography.labelMedium, color = color)
+                    Text("수확 ${vm.fishing.collected(s)}/$kinds", style = MaterialTheme.typography.labelMedium, color = color)
                 }
             }
         }
@@ -1024,7 +1020,6 @@ private fun GiantIntro(vm: FishingViewModel, onBook: () -> Unit) {
         )
         if (f != null) GiantPanel(g, f, vm)
         Spacer(Modifier.height(8.dp))
-        SecondaryButton("📖 도감", onBook)
     }
 }
 

@@ -347,6 +347,8 @@ object Opt {
     val weakBelow = listOf(60 to "60%", 70 to "70%", 80 to "80%")
     val weakWindow = listOf(7 to "7일", 14 to "14일", 30 to "30일")
     val weakMin = listOf(3 to "3문제", 5 to "5문제")
+    val examSize = listOf(10 to "10문제", 20 to "20문제", 25 to "25문제")
+    val examConquer = listOf(80 to "80점", 90 to "90점", 100 to "100점")
     val reviewDaily = listOf(0 to "끔", 5 to "5유형", 10 to "10유형", 20 to "20유형")
     val reviewDays = listOf("1,3,7,14" to "1·3·7·14일", "1,2,4,8,16" to "1·2·4·8·16일", "2,5,10,20,40" to "2·5·10·20·40일")
     val weakClear = listOf(1 to "1번", 2 to "2번", 3 to "3번")
@@ -404,8 +406,8 @@ fun ResetEditor() {
         Text("무엇을 지울까요?", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 12.dp))
         SwitchRow("📘 문제 진도", "외운 기록, 복습 일정, 오답노트", words) { words = it }
         SwitchRow(
-            "🍎 열매 · 도감 · 쿠폰",
-            if (all) "모은 열매, 수확한 열매 도감, 원정 기록, 받은 쿠폰" else "전체 문제를 고를 때만 지울 수 있어요",
+            "🍎 열매 · 쿠폰",
+            if (all) "모은 열매, 단원 시험 기록, 받은 쿠폰" else "전체 문제를 고를 때만 지울 수 있어요",
             fish && all,
         ) { if (all) fish = it }
         SwitchRow(
@@ -425,7 +427,7 @@ fun ResetEditor() {
         var typed by remember { mutableStateOf("") }
         val what = listOfNotNull(
             if (words) (if (all) "전체 문제" else "고른 문제집 ${picked.size}개") + "의 외운 기록" else null,
-            if (fish && all) "열매 · 도감 · 쿠폰" else null,
+            if (fish && all) "열매 · 쿠폰" else null,
             if (records && all) "등급 · 공부 시간 · 통계" else null,
         )
         androidx.compose.material3.AlertDialog(

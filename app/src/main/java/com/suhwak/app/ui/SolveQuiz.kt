@@ -85,6 +85,8 @@ fun SolveQuiz(
     badge: String? = null,
     /** 이보다 빨리 낸 1차 답은 "공책에 풀었나요?"를 묻는다 (기록에서도 찍은 것으로 본다). 0 = 묻지 않음. */
     fastMs: Long = SOLVE_FAST_MS,
+    /** 단원 종합시험: 한 번만 내고 바로 다음 (힌트·빈칸 풀이·정답 보여주기 없음). onAnswered(1=맞힘, 0=틀림). */
+    exam: Boolean = false,
 ) {
     val context = LocalContext.current
     val notebook = remember { NotebookCopy(context) }
@@ -117,6 +119,10 @@ fun SolveQuiz(
     fun harvest() {
         onActivity()
         val right = MathGrade.isRight(word.qtype, word.meaning, response)
+        if (exam) {
+            onAnswered(if (right) 1 else 0, response, if (right) emptyList() else listOf(shownAnswer()))
+            return
+        }
         when {
             right -> {
                 tries = if (explained) 4 else stage + 1
@@ -160,8 +166,8 @@ fun SolveQuiz(
                 if (badge != null) Tag(badge, Sea.FruitSoft, Sea.FruitText)
                 if (word.level.isNotBlank()) Tag(word.level, Color.White, Sea.Soft)
             }
-            if (word.pos.isNotBlank()) Text(word.pos, style = MaterialTheme.typography.titleMedium, color = Sea.Accent)
-            StageChips(stage, tries)
+            if (word.pos.isNotBlank() && !exam) Text(word.pos, style = MaterialTheme.typography.titleMedium, color = Sea.Accent)
+            if (!exam) StageChips(stage, tries)
         }
     }
 
@@ -236,7 +242,14 @@ fun SolveQuiz(
                 modifier = Modifier.fillMaxWidth().height(60.dp),
                 shape = RoundedCornerShape(18.dp),
             ) {
-Text(if (stage == 2 && !clozeDone) "빈칸을 먼저 채워요" else "🍎 수확하기 (채점)", style = MaterialTheme.typography.titleLarge.copy(fontSize = 21.sp))
+Text(
+                    when {
+                        exam -> "제출하고 다음 ›"
+                        stage == 2 && !clozeDone -> "빈칸을 먼저 채워요"
+                        else -> "🍎 수확하기 (채점)"
+                    },
+                    style = MaterialTheme.typography.titleLarge.copy(fontSize = 21.sp),
+                )
             }
         } else {
             Button(onClick = onNext, modifier = Modifier.fillMaxWidth().height(60.dp), shape = RoundedCornerShape(18.dp)) {
