@@ -350,7 +350,9 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
                 test -> (if (deckId > 0) dao.getWords(deckId) else all).filter { !it.excluded }.shuffled().take(settings.testSize)
                 today -> {
                     val limit = newPerDay(settings)
-                    val fresh = dao.getNewWords(limit * 3)
+                    // 진도대로: 새 수학 문제는 단원 순서(1단원부터), 한 단원 안에서는 기본 씨앗 먼저
+                    val deckNames = dao.getAllDecks().associate { it.id to it.name }
+                    val fresh = com.suhwak.app.data.Progress.order(dao.getNewWords(5000), deckNames).take(limit * 3)
                     // 약점 맞춤 (수학): 최근 정답률이 낮은 유형들의 쌍둥이를 오늘 새 문제의 weakShare%만큼, 유형을 돌아가며 섞는다
                     val weakTypes = if (settings.weakShare > 0) {
                         TypeStats.weak(TypeStats.lastDays(answerLog, settings.weakWindow), settings.weakMin, settings.weakBelow).map { it.concept }
