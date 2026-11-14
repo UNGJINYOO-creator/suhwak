@@ -230,6 +230,22 @@ class StudySettings(context: Context) {
         get() = prefs.getInt("farmPlots", 6)
         set(v) = prefs.edit().putInt("farmPlots", v).apply()
 
+    /** 📷 사진 문제: 제미나이 모델을 써 볼 순서 (쉼표로). 앞 모델이 막히면 다음 모델로. */
+    var geminiModels: String
+        get() = prefs.getString("geminiModels", null) ?: DEFAULT_GEMINI_MODELS
+        set(v) = prefs.edit().putString("geminiModels", v.trim()).apply()
+    val geminiModelList: List<String> get() = geminiModels.split(',', '\n').map { it.trim() }.filter { it.isNotEmpty() }
+
+    /** 📷 한 문제를 찍을 때 만들 쌍둥이 수 (기본 3). */
+    var photoTwinsOne: Int
+        get() = prefs.getInt("photoTwinsOne", 3)
+        set(v) = prefs.edit().putInt("photoTwinsOne", v).apply()
+
+    /** 📷 한 페이지를 찍을 때 문제마다 만들 쌍둥이 수 (기본 1). */
+    var photoTwinsPage: Int
+        get() = prefs.getInt("photoTwinsPage", 1)
+        set(v) = prefs.edit().putInt("photoTwinsPage", v).apply()
+
     /** Questions in 시험 모드. */
     var testSize: Int
         get() = prefs.getInt("testSize", 20)
@@ -403,6 +419,7 @@ class StudySettings(context: Context) {
         set(v) = prefs.edit().putInt("recentDays", v).apply()
 
     companion object {
+        const val DEFAULT_GEMINI_MODELS = "gemini-2.5-flash, gemini-2.5-flash-lite, gemini-2.0-flash"
         /** 1000 → "1", 1500 → "1.5". */
         fun secondsText(ms: Long): String = if (ms % 1000 == 0L) "${ms / 1000}" else "${ms / 1000}.${ms % 1000 / 100}"
     }

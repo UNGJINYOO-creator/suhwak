@@ -40,6 +40,8 @@ object Backup {
                     if (name == "databases" && !file.name.startsWith(DB)) return@forEach
                     // 이 기기에만 있는 설정(테스트 모드)은 백업에 넣지 않는다
                     if (name == "shared_prefs" && file.name == DeviceMode.PREFS + ".xml") return@forEach
+                    // 암호화한 비밀 값(제미나이 키)도 이 기기에만 둔다
+                    if (name == "shared_prefs" && file.name == SecretStore.PREFS + ".xml") return@forEach
                     zip.putNextEntry(ZipEntry("$name/" + file.relativeTo(dir).path))
                     file.inputStream().use { it.copyTo(zip) }
                     zip.closeEntry()

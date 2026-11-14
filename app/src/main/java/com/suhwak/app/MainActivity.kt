@@ -226,11 +226,14 @@ private fun AppContent() {
                                 onStudy = { nav.navigate("study/-1?wrong=true") },
                             )
                         }
+                        composable("photo") {
+                            com.suhwak.app.ui.PhotoScreen(onBack = { nav.popBackStack() })
+                        }
                         composable("weekly") {
                             com.suhwak.app.ui.WeeklyReportScreen(onBack = { nav.popBackStack() })
                         }
                         composable("settings") {
-                            SettingsScreen(onAdd = { kind ->
+                            SettingsScreen(onPhoto = { nav.navigate("photo") }, onAdd = { kind ->
                                 // The home screen opens the camera, album or name dialog.
                                 com.suhwak.app.ui.AddRequest.kind = kind
                                 nav.navigate("home") {

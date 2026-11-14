@@ -70,7 +70,7 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
+fun SettingsScreen(onAdd: (AddKind) -> Unit = {}, onPhoto: () -> Unit = {}) {
     val context = LocalContext.current
     val settings = remember { StudySettings(context) }
     val game = remember { Game(context) }
@@ -530,6 +530,13 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                     }
                 }
                 Group(
+                    "📷 AI 사진 문제 (제미나이)",
+                    if (com.suhwak.app.data.SecretStore.geminiKey(context) != null) "키 저장됨 · 문제를 찍으면 쌍둥이까지 만들어요" else "API 키를 넣으면 쓸 수 있어요",
+                    open == "photo", { toggle("photo") },
+                ) {
+                    Body { PhotoSettings(settings, onPhoto) }
+                }
+                Group(
                     "📨 텔레그램 알림",
                     if (settings.telegramToken.isNotBlank() && settings.telegramChatId.isNotBlank()) "연결됨" else "연결 안 됨",
                     open == "telegram", { toggle("telegram") },
@@ -588,6 +595,63 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
             }
             Spacer(Modifier.height(24.dp))
         }
+    }
+}
+
+/** 📷 AI 사진 문제: 제미나이 API 키(암호화 저장), 모델 순서, 쌍둥이 수, 사진 찍기 버튼. */
+@Composable
+private fun PhotoSettings(settings: StudySettings, onPhoto: () -> Unit) {
+    val context = LocalContext.current
+    var shown by remember { mutableStateOf(com.suhwak.app.data.SecretStore.geminiKeyShown(context)) }
+    var typed by remember { mutableStateOf("") }
+    var models by remember { mutableStateOf(settings.geminiModels) }
+    var twinsOne by remember { mutableIntStateOf(settings.photoTwinsOne) }
+    var twinsPage by remember { mutableIntStateOf(settings.photoTwinsPage) }
+    Text(
+        "문제 사진을 찍으면 제미나이가 읽어서 정답·힌트·빈칸 풀이와 숫자만 바꾼 쌍둥이 문제를 만들어요. 저장하기 전에 부모님이 확인하고 고칠 수 있어요.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.outline,
+    )
+    if (shown != null) {
+        PrimaryButton("📷 사진으로 문제 만들기", onPhoto, Modifier.fillMaxWidth().padding(vertical = 8.dp))
+    }
+    Text("API 키", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp))
+    Text(
+        (shown?.let { "저장됨 $it · " } ?: "") + "Google AI Studio에서 만든 키예요. 이 기기 안에만 암호화해서 두고, 백업·동기화에는 들어가지 않아요.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.outline,
+    )
+    OutlinedTextField(
+        value = typed,
+        onValueChange = { typed = it.trim() },
+        label = { Text(if (shown == null) "API 키 붙여 넣기" else "새 키로 바꾸기") },
+        singleLine = true,
+        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Row {
+        TextButton(enabled = typed.length >= 20, onClick = {
+            com.suhwak.app.data.SecretStore.setGeminiKey(context, typed)
+            typed = ""
+            shown = com.suhwak.app.data.SecretStore.geminiKeyShown(context)
+        }) { Text("🔒 키 저장") }
+        if (shown != null) {
+            TextButton(onClick = { com.suhwak.app.data.SecretStore.setGeminiKey(context, null); shown = null }) { Text("키 지우기") }
+        }
+    }
+    Labeled("한 문제를 찍을 때 쌍둥이 문제") {
+        NumberChoice(twinsOne, listOf(0 to "안 만듦", 2 to "2문제", 3 to "3문제", 5 to "5문제"), "문제", 8, min = 0) { twinsOne = it; settings.photoTwinsOne = it }
+    }
+    Labeled("한 페이지를 찍을 때 문제마다 쌍둥이") {
+        NumberChoice(twinsPage, listOf(0 to "안 만듦", 1 to "1문제", 2 to "2문제"), "문제", 3, min = 0) { twinsPage = it; settings.photoTwinsPage = it }
+    }
+    Labeled("모델 순서", "앞 모델이 막히거나(한도·오류) 실패하면 다음 모델을 써요. 쉼표로 나눠요") {
+        OutlinedTextField(
+            value = models,
+            onValueChange = { models = it; settings.geminiModels = it },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        TextButton(onClick = { models = StudySettings.DEFAULT_GEMINI_MODELS; settings.geminiModels = models }) { Text("기본값으로") }
     }
 }
 
