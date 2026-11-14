@@ -245,13 +245,14 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         val wordsLeft = settings.dailyGoalMinutes <= 0 && settings.dailyWords > 0 && stats.learnedCount < settings.dailyWords
         testMode = settings.testMode
         // 🧪 테스트 모드: 게임은 목표와 상관없이 언제나, 무제한
-        fishOpen = testMode || (!timeLeft && !wordsLeft && fishing.triesLeft > 0)
+        val farm = com.suhwak.app.data.Farm(getApplication())
+        fishOpen = testMode || (!timeLeft && !wordsLeft && farm.triesLeft > 0)
         fishLine = when {
             testMode -> "🧪 테스트 모드: 언제나 열려요"
             timeLeft || wordsLeft -> "🔒 오늘 목표를 채우면 열려요"
-            fishing.caughtToday -> "오늘 ${fishing.caughtFishToday} 수확했어요! 🧺"
-            fishing.triesLeft <= 0 -> "내일 또 수확하러 와요 🧺"
-            else -> "열렸어요! 도전해 보세요" + fishing.triesNote
+            farm.triesLeft <= 0 -> "오늘 밭일은 다 했어요. 내일 또 수확해요 🧺"
+            farm.playsToday > 0 -> "밭이 열려 있어요 🌱" + (if (farm.unlimited) "" else " (남은 도전 ${farm.triesLeft}번)")
+            else -> "밭이 열렸어요! 🌱 쌍둥이 문제로 키워요" + (if (farm.unlimited) "" else " (도전 ${farm.triesLeft}번)")
         }
         goalWords = settings.dailyWords
         stars = game.stars

@@ -192,8 +192,15 @@ private fun AppContent() {
                                 onStudyDeck = { id -> nav.navigate("study/$id") },
                                 onWrongNote = { nav.navigate("study/-1?wrong=true") },
                                 onWrongList = { nav.navigate("wrongnote") },
-                                onFishing = { giant -> nav.navigate(if (giant) "fishing?giant=true" else "fishing") },
+                                // 🌱 오늘의 수확: 수학용 농장 게임 (예전 낚시 게임 대신)
+                                onFishing = { _ -> nav.navigate("farm") },
                                 onExams = { nav.navigate("exams") },
+                            )
+                        }
+                        composable("farm") {
+                            com.suhwak.app.ui.FarmScreen(
+                                onBack = { nav.popBackStack() },
+                                onStudy = { nav.navigate("study/-1?today=true") { popUpTo("home") } },
                             )
                         }
                         // ⚔️ 단원 정복: 단원 종합시험 (100점 만점, 최고 점수 = 깎은 보스 체력)

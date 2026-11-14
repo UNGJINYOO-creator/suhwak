@@ -220,6 +220,16 @@ class StudySettings(context: Context) {
         get() = prefs.getInt("examConquer", 90)
         set(v) = prefs.edit().putInt("examConquer", v).apply()
 
+    /** 🌱 오늘의 수확(농장 게임): 한 판 문제 수 (기본 12). */
+    var farmQuestions: Int
+        get() = prefs.getInt("farmQuestions", 12)
+        set(v) = prefs.edit().putInt("farmQuestions", v).apply()
+
+    /** 🌱 오늘의 수확: 밭 칸 수 (기본 6, 칸마다 2번 맞히면 수확). */
+    var farmPlots: Int
+        get() = prefs.getInt("farmPlots", 6)
+        set(v) = prefs.edit().putInt("farmPlots", v).apply()
+
     /** Questions in 시험 모드. */
     var testSize: Int
         get() = prefs.getInt("testSize", 20)

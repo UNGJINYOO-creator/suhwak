@@ -372,7 +372,7 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                 ) {
                     Body {
                         Text(
-                            "오늘 목표를 채우면 열리는 수확 게임이에요. 맞히면 열매를 끌어오고, 틀리거나 가만히 있으면 멀어져요.",
+                            "오늘 목표를 채우면 열리는 농장 게임이에요. 오늘 푼 유형의 쌍둥이 문제를 맞히면 밭이 자라 수확해요 (틀리면 싹이 시들어요).",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.outline,
                         )
@@ -383,6 +383,14 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                         }
                         Labeled("하루 도전 횟수") {
                             NumberChoice(fishTries, Opt.tries, "번", 20, min = 0) { fishTries = it; settings.fishTries = it }
+                        }
+                        var farmQ by remember { mutableIntStateOf(settings.farmQuestions) }
+                        var farmP by remember { mutableIntStateOf(settings.farmPlots) }
+                        Labeled("🌱 한 판 문제 수", "오늘 푼 유형의 쌍둥이 문제로 밭을 키워요") {
+                            NumberChoice(farmQ, listOf(8 to "8문제", 12 to "12문제", 16 to "16문제"), "문제", 40, min = 4) { farmQ = it; settings.farmQuestions = it }
+                        }
+                        Labeled("🌱 밭 칸 수", "칸마다 2번 맞히면 수확해요") {
+                            NumberChoice(farmP, listOf(3 to "3칸", 6 to "6칸", 9 to "9칸"), "칸", 12, min = 2) { farmP = it; settings.farmPlots = it }
                         }
                         GiantMixEditor(settings)
                         // +/- per answer stay open: these are what a parent tunes most.
