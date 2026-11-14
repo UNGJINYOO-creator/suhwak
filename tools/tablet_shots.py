@@ -99,7 +99,20 @@ tap("오답노트", exact=True); shot("15-wrongnote")
 
 restart()
 tap("복습·통계"); shot("16-review"); scroll(); shot("17-review-scrolled")
+for _ in range(3):
+    if tap("주간 리포트 보기"):
+        break
+    scroll()
+shot("21-weekly"); scroll(); shot("21b-weekly-scrolled"); scroll(); shot("21c-weekly-bottom")
+
+restart()
 tap("설정", exact=True); shot("18-settings")
-if tap("진도 초기화"):
-    shot("19-settings-reset")
+if tap("게임과 보상"):
+    shot("18b-settings-game")
+if tap("부모님 관리"):
+    shot("18c-settings-parent")
+    if tap("AI 사진 문제"):
+        shot("18d-settings-photo")
+    if tap("진도 초기화"):
+        shot("19-settings-reset")
 scroll(); shot("20-settings-bottom")
