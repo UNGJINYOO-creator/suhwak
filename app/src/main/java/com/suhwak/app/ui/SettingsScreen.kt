@@ -42,6 +42,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -786,7 +787,7 @@ private fun SyncEditor() {
         }
     }
     Text(
-        "태블릿과 폰에서 같은 가족 코드를 쓰면 문제 진도, 열매, 거대 열매, 설정이 저절로 맞춰져요. 앱을 닫을 때와 열 때마다 맞춰요.",
+        "태블릿과 폰에서 같은 가족 코드를 쓰면 문제 진도, 오답노트, 유형 복습, 단원 시험 점수, 열매, 농장 기록, 설정이 저절로 맞춰져요. 앱을 닫을 때와 열 때마다 맞춰요.",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.outline,
     )
@@ -821,6 +822,7 @@ private fun SyncEditor() {
                 style = MaterialTheme.typography.bodySmall,
             )
         }
+        DeviceList(busy)
         Row {
             TextButton(enabled = !busy, onClick = { sync() }) { Text("🔄 지금 맞추기") }
             TextButton(onClick = { com.suhwak.app.sync.FamilySync.disconnect(context); code = null; status = null }) { Text("연결 끊기") }
@@ -828,6 +830,37 @@ private fun SyncEditor() {
     }
     (status ?: com.suhwak.app.sync.FamilySync.lastError(context)?.let { "지난번 동기화 오류: $it" })?.let {
         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+    }
+}
+
+/** 가족 기기 목록: 기기마다 앱 버전과 마지막으로 맞춘 때. 버전이 다르면 업데이트하라고 알린다. */
+@Composable
+private fun DeviceList(busy: Boolean) {
+    val context = LocalContext.current
+    val devices = remember(busy) { com.suhwak.app.sync.FamilySync.devices(context) }
+    if (devices.isEmpty()) return
+    val fmt = remember { java.text.SimpleDateFormat("M월 d일 a h:mm", java.util.Locale.KOREA) }
+    Column(
+        Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant).padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text("연결된 기기", style = MaterialTheme.typography.labelLarge)
+        devices.forEach { d ->
+            Text(
+                (if (d.self) "📍 " else "") + d.name + (if (d.self) " (이 기기)" else "") +
+                    " · build-${d.build} · " + fmt.format(java.util.Date(d.at)),
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        val newest = devices.maxOf { it.build }
+        devices.filter { it.build < newest }.takeIf { it.isNotEmpty() }?.let { old ->
+            Text(
+                "⚠️ ${old.joinToString(", ") { it.name.substringBefore(" · ") }}의 앱이 예전 버전이에요. build-$newest 로 업데이트하면 기록이 더 잘 맞아요.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
     }
 }
 

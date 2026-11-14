@@ -83,4 +83,43 @@ class PrefMergeTest {
         assertEquals(1, out.length())
         assertEquals(true, out.getJSONObject(0).getBoolean("used"))
     }
+
+    @Test fun wrongNoteEntriesMergePerProblem() {
+        val a = """{"k1":{"m":2,"d":1,"l":100,"a":["11/1 x=3"]},"k2":{"m":2,"d":0,"l":0,"a":[]}}"""
+        val b = """{"k1":{"m":3,"d":0,"l":90,"a":["11/2 x=4"]},"k3":{"m":2,"d":0,"l":0,"a":[]}}"""
+        val out = JSONObject(PrefCodec.merge(obj("note" to s(a)), obj("note" to s(b)), "wrongNote").str("note"))
+        assertEquals(setOf("k1", "k2", "k3"), out.keys().asSequence().toSet())
+        val k1 = out.getJSONObject("k1")
+        assertEquals(3, k1.getInt("m"))
+        assertEquals(1, k1.getInt("d"))
+        assertEquals(2, k1.getJSONArray("a").length())
+    }
+
+    @Test fun unitExamKeepsBestAndBothTries() {
+        val a = """{"4":{"b":80,"t":[{"d":10,"s":80,"w":[]}]}}"""
+        val b = """{"4":{"b":70,"t":[{"d":11,"s":70,"w":["x"]}]}}"""
+        val out = JSONObject(PrefCodec.merge(obj("units" to s(a)), obj("units" to s(b)), "unitExam").str("units")).getJSONObject("4")
+        assertEquals(80, out.getInt("b"))
+        assertEquals(2, out.getJSONArray("t").length())
+        assertEquals(11L, out.getJSONArray("t").getJSONObject(1).getLong("d"))
+    }
+
+    @Test fun typeReviewTakesLaterCount() {
+        val a = """{"일차부등식":{"s":1,"due":5,"last":3,"g":false}}"""
+        val b = """{"일차부등식":{"s":2,"due":9,"last":4,"g":false}}"""
+        val out = JSONObject(PrefCodec.merge(obj("types" to s(a)), obj("types" to s(b)), "typeReview").str("types"))
+        assertEquals(2, out.getJSONObject("일차부등식").getInt("s"))
+    }
+
+    @Test fun devicesKeepLatestPerDevice() {
+        val out = PrefCodec.merge(obj("A" to s("200|30|폰"), "B" to s("50|28|태블릿")), obj("A" to s("100|29|폰"), "B" to s("90|29|태블릿")), "devices")
+        assertEquals("200|30|폰", out.str("A"))
+        assertEquals("90|29|태블릿", out.str("B"))
+    }
+
+    @Test fun noteIdsBecomeKeys() {
+        val raw = """{"5":{"m":2},"7":{"m":1}}"""
+        val out = JSONObject(PrefCodec.renameKeys(raw) { if (it == "5") "w5" else null })
+        assertEquals(setOf("w5"), out.keys().asSequence().toSet())
+    }
 }

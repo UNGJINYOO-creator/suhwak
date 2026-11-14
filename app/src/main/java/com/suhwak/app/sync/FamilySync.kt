@@ -27,7 +27,11 @@ object FamilySync {
      * Preference files that follow the child; "study" is the settings (텔레그램 too), "alerts" and "digest"
      * keep the parents' messages from going out twice. Device-only files (deck sort, seeding) stay out.
      */
-    private val PREF_FILES = listOf("game", "giant", "fishing", "daily", "history", "wrongNote", "masterCheck", "study", "alerts", "digest", "guides", "rewards")
+    private val PREF_FILES = listOf(
+        "game", "giant", "fishing", "daily", "history", "wrongNote", "masterCheck", "study", "alerts", "digest", "guides", "rewards",
+        // 수학: 유형 간격 복습, 다시 볼 유형, 단원 종합시험 점수, 농장 기록, 가족 기기 목록
+        "typeReview", "weakTypes", "unitExam", "farm", "devices",
+    )
     /** Files merged key by key against the last synced copy: whichever device changed a key wins it. */
     private val BY_CHANGE = setOf("study", "alerts", "guides", "rewards")
 
@@ -36,6 +40,32 @@ object FamilySync {
     fun code(context: Context): String? = prefs(context).getString("code", null)
     fun lastSync(context: Context): Long = prefs(context).getLong("lastSync", 0)
     fun lastError(context: Context): String? = prefs(context).getString("error", null)
+
+    /** 가족의 기기 하나: 이름, 앱 버전(build 번호), 마지막으로 맞춘 때. */
+    data class Device(val id: String, val name: String, val build: Int, val at: Long, val self: Boolean)
+
+    /** 이 기기를 구별하는 id (처음 한 번 만든다). */
+    private fun deviceId(context: Context): String {
+        val dp = context.applicationContext.getSharedPreferences(com.suhwak.app.data.DeviceMode.PREFS, Context.MODE_PRIVATE)
+        return dp.getString("id", null) ?: newCode().also { dp.edit().putString("id", it).apply() }
+    }
+
+    /** 같은 가족 코드를 쓰는 기기들 (최근에 맞춘 것부터). 동기화할 때마다 서로 적어 둔다. */
+    fun devices(context: Context): List<Device> {
+        val me = deviceId(context)
+        return context.applicationContext.getSharedPreferences("devices", Context.MODE_PRIVATE).all.mapNotNull { (k, v) ->
+            val p = (v as? String)?.split('|') ?: return@mapNotNull null
+            if (p.size < 3) return@mapNotNull null
+            Device(k, p.drop(2).joinToString("|"), p[1].toIntOrNull() ?: 0, p[0].toLongOrNull() ?: 0, k == me)
+        }.sortedByDescending { it.at }
+    }
+
+    private fun writeSelf(context: Context, now: Long) {
+        val tablet = context.resources.configuration.smallestScreenWidthDp >= 600
+        val name = (if (tablet) "태블릿" else "폰") + " · " + android.os.Build.MODEL.replace('|', ' ')
+        context.applicationContext.getSharedPreferences("devices", Context.MODE_PRIVATE).edit()
+            .putString(deviceId(context), "$now|${com.suhwak.app.BuildConfig.VERSION_CODE}|$name").apply()
+    }
 
     fun newCode(): String = (1..10).map { ALPHABET.random() }.joinToString("")
 
@@ -209,6 +239,7 @@ object FamilySync {
             }
         }
 
+        writeSelf(context, now)
         // Preferences, with word ids turned into keys so they mean the same word on every device.
         val keyOf = words.associate { it.id to wordKey(it, byId) }
         val idOf = keyOf.entries.associate { (id, k) -> k to id }
@@ -223,7 +254,7 @@ object FamilySync {
                 result = when {
                     !localChanged -> remote
                     file in BY_CHANGE -> PrefCodec.byChange(hashes.optJSONObject("b$file"), local, remote)
-                    else -> PrefCodec.merge(local, remote)
+                    else -> PrefCodec.merge(local, remote, file)
                 }
                 if (result.toString() != local.toString()) PrefCodec.import(context, file, result, idOf)
             }
@@ -262,6 +293,8 @@ object PrefCodec {
                         val parts = e.split(':')
                         parts[0].toLongOrNull()?.let(keyOf::get)?.let { (listOf(it) + parts.drop(1)).joinToString(":") }
                     }.sorted().joinToString(","))
+                file == "wrongNote" && k == "note" && v is String ->
+                    JSONArray().put("s").put(renameKeys(v) { it.toLongOrNull()?.let(keyOf::get) })
                 v is Boolean -> JSONArray().put("b").put(v)
                 v is Int -> JSONArray().put("i").put(v)
                 v is Long -> JSONArray().put("l").put(v)
@@ -286,6 +319,7 @@ object PrefCodec {
                 "f" -> e.putFloat(k, tv.getDouble(1).toFloat())
                 "s" -> {
                     var s = tv.getString(1)
+                    if (file == "wrongNote" && k == "note") s = renameKeys(s) { idOf[it]?.toString() }
                     if (file == "daily" && k == "learned") s = s.split(',').mapNotNull { idOf[it]?.toString() }.joinToString(",")
                     if (file == "wrongNote" && k == "words") s = s.split(',').filter { it.isNotBlank() }.mapNotNull { en ->
                         val parts = en.split(':')
@@ -324,6 +358,63 @@ object PrefCodec {
         return out
     }
 
+    /** JSON 객체의 키(문제 id ⇄ 문제 키)를 바꾼다. 바꿀 수 없는 키는 뺀다. */
+    fun renameKeys(raw: String, to: (String) -> String?): String {
+        val o = runCatching { JSONObject(raw) }.getOrNull() ?: return raw
+        val out = JSONObject()
+        o.keys().asSequence().sorted().forEach { k -> to(k)?.let { out.put(it, o.get(k)) } }
+        return out.toString()
+    }
+
+    private fun objects(raw: String): JSONObject = runCatching { JSONObject(raw) }.getOrDefault(JSONObject())
+
+    /**
+     * 수학 기록(JSON 한 덩어리로 저장된 것)을 항목마다 합친다. 두 기기 모두 바뀌었을 때만 쓰인다.
+     *  - 오답노트 note: 마지막으로 맞힌 날(l)이 늦은 쪽, 틀린 횟수는 큰 쪽, 틀린 답은 둘 다 (최근 5개)
+     *  - 유형 복습 types: 마지막으로 센 날(last)이 늦은 쪽, 같으면 단계가 높은 쪽
+     *  - 다시 볼 유형 types: 마지막 날(last)이 늦은 쪽, 같으면 맞힌 횟수가 많은 쪽
+     *  - 단원 시험 units: 최고 점수는 큰 쪽, 기록은 둘 다 (날짜순, 최근 10번)
+     * 모르는 것은 null.
+     */
+    fun mergeRecords(file: String, key: String, a: String, b: String): String? {
+        val kind = when ("$file/$key") {
+            "wrongNote/note" -> 0
+            "typeReview/types" -> 1
+            "weakTypes/types" -> 2
+            "unitExam/units" -> 3
+            else -> return null
+        }
+        val x = objects(a)
+        val y = objects(b)
+        val out = JSONObject()
+        (x.keys().asSequence() + y.keys().asSequence()).toSortedSet().forEach { k ->
+            val l = x.optJSONObject(k)
+            val r = y.optJSONObject(k)
+            out.put(k, if (l == null || r == null) (l ?: r) else when (kind) {
+                0 -> {
+                    val newer = if (r.optLong("l") > l.optLong("l")) r else l
+                    val answers = (strings(l.optJSONArray("a")) + strings(r.optJSONArray("a"))).distinct().takeLast(5)
+                    JSONObject(newer.toString()).put("m", maxOf(l.optInt("m"), r.optInt("m"))).put("a", JSONArray(answers))
+                }
+                1 -> if (compareValuesBy(r, l, { it.optLong("last") }, { it.optInt("s") }) > 0) r else l
+                2 -> if (compareValuesBy(r, l, { it.optString("last") }, { it.optInt("streak") }) > 0) r else l
+                else -> {
+                    val tries = (objectsOf(l.optJSONArray("t")) + objectsOf(r.optJSONArray("t")))
+                        .distinctBy { it.toString() }.sortedBy { it.optLong("d") }.takeLast(10)
+                    JSONObject().put("b", maxOf(l.optInt("b"), r.optInt("b"))).put("t", JSONArray(tries))
+                }
+            })
+        }
+        return out.toString()
+    }
+
+    private fun strings(a: JSONArray?): List<String> = if (a == null) emptyList() else List(a.length()) { a.getString(it) }
+    private fun objectsOf(a: JSONArray?): List<JSONObject> = if (a == null) emptyList() else List(a.length()) { a.getJSONObject(it) }
+
+    /** 가족 기기 목록: 기기마다 마지막으로 맞춘 때가 늦은 쪽 ("시각|build|이름"). */
+    private fun laterDevice(a: String, b: String): String =
+        if ((b.substringBefore('|').toLongOrNull() ?: 0) > (a.substringBefore('|').toLongOrNull() ?: 0)) b else a
+
     /** Coupons from both devices, one per claim time; used on either device = used. */
     fun mergeCoupons(a: String, b: String): String {
         val all = (runCatching { JSONArray(a) }.getOrNull()?.let { x -> (0 until x.length()).map { x.getJSONObject(it) } }.orEmpty() +
@@ -335,7 +426,7 @@ object PrefCodec {
     }
 
     /** Key by key: a newer "date" or "resetAt" wins the whole file; otherwise bigger numbers, either flag, both sets. */
-    fun merge(local: JSONObject, remote: JSONObject): JSONObject {
+    fun merge(local: JSONObject, remote: JSONObject, file: String = ""): JSONObject {
         val ld = local.optJSONArray("date")?.optString(1)
         val rd = remote.optJSONArray("date")?.optString(1)
         if (ld != null && rd != null && ld != rd) return if (rd > ld) remote else local
@@ -356,6 +447,8 @@ object PrefCodec {
                     if (rt > lt) r else l
                 }
                 k == "coupons" -> JSONArray().put("s").put(mergeCoupons(l.getString(1), r.getString(1)))
+                file == "devices" && r.getString(0) == "s" -> JSONArray().put("s").put(laterDevice(l.getString(1), r.getString(1)))
+                r.getString(0) == "s" -> mergeRecords(file, k, l.getString(1), r.getString(1))?.let { JSONArray().put("s").put(it) }
                 else -> null
             } ?: when (r.getString(0)) {
                 "b" -> JSONArray().put("b").put(l.getBoolean(1) || r.getBoolean(1))
