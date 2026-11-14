@@ -84,6 +84,12 @@ if tap("오늘의 수확 시작") or tap("수확", exact=True):
     shot("13-solve")
     time.sleep(6)
     shot("13b-solve-later")
+    # 태블릿 풀이 칸에 손가락으로 몇 획 그려 본다 (휴대폰은 풀이 칸이 없어서 그냥 지나감)
+    w, h = screen()
+    if w >= 1500:
+        for (x1, y1, x2, y2) in [(0.10, 0.70, 0.30, 0.70), (0.12, 0.76, 0.28, 0.80), (0.33, 0.66, 0.36, 0.82), (0.40, 0.72, 0.52, 0.74)]:
+            adb("shell", "input", "swipe", str(int(w * x1)), str(int(h * y1)), str(int(w * x2)), str(int(h * y2)), "300")
+        shot("13c-solve-ink")
     scroll(); shot("14-solve-scrolled")
 
 restart()

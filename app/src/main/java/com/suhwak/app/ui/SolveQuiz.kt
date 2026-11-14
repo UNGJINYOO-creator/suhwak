@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -64,7 +65,7 @@ const val SOLVE_FAST_MS = 10_000L
 
 /**
  * 씨앗(수학 문제) 풀기 — 공책 풀이 방식. 앱에는 문제와 답만, 풀이는 종이 공책에 한다.
- *  - 태블릿(가로로 넓을 때): 왼쪽 문제 크게 / 오른쪽 답 입력.  휴대폰: 위 문제 / 아래 답.
+ *  - 태블릿(가로로 넓을 때): 왼쪽 위 문제, 왼쪽 아래 풀이 칸(펜으로 식을 쓰며 풀기) / 오른쪽 답 입력.  휴대폰: 위 문제 / 아래 답 (풀이는 종이 공책).
  *  - 문제 위의 공책 번호(오늘 날짜 · n번)를 공책에 같이 적고 푼다.
  *  - 객관식은 보기 버튼, 주관식은 수학 숫자판 (글자 답이면 '글자 입력').
  *  - 1차: 문제만.  2차: 힌트 한 줄 + 다시.  3차: 풀이의 빈칸(㉠ ㉡)을 다 맞힐 때까지 채운 뒤 답을 다시 낸다.
@@ -240,14 +241,23 @@ Text(if (stage == 2 && !clozeDone) "빈칸을 먼저 채워요" else "🍎 수�
             // 아주 넓은 화면(가로 태블릿): 답 쪽은 숫자판이 쓰기 좋은 폭(440dp)으로 두고 나머지는 모두 문제·풀이에
             val roomy = maxWidth >= 1000.dp
             Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(if (roomy) 28.dp else 18.dp)) {
+                // 왼쪽: 위에 문제(·힌트·빈칸 풀이), 아래 남은 높이 전부 풀이 칸 (펜으로 식을 쓰며 푼다)
+                val heavy = stage == 2 || (stage == 3 && tries >= 3)
+                val boxHeight = maxHeight
                 Column(
-                    Modifier.weight(1.15f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    Modifier.weight(1.15f).fillMaxHeight().padding(horizontal = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    header()
-                    MathView(word.question.ifBlank { word.text }, emptyList(), null, null, true, {})
-                    feedback()
-                    clozePart()
+                    Column(
+                        Modifier.heightIn(max = boxHeight * (if (heavy) 0.62f else 0.42f)).verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        header()
+                        MathView(word.question.ifBlank { word.text }, emptyList(), null, null, true, {})
+                        feedback()
+                        clozePart()
+                    }
+                    SolvePad(word.id, onActivity, Modifier.fillMaxWidth().weight(1f))
                 }
                 Column(
                     (if (roomy) Modifier.width(440.dp) else Modifier.weight(0.85f)).fillMaxHeight().padding(horizontal = 4.dp),
