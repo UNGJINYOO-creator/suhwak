@@ -144,7 +144,7 @@ fun ReviewScreen(
                         Spacer(Modifier.height(16.dp))
                         PrimaryButton("복습 시작", onReview)
                     } else {
-                        Text("오늘 복습은 끝났어요 👍", style = MaterialTheme.typography.titleLarge)
+                        Text("오늘 복습할 문제를 다 풀었어요 👍 새 문제로 더 수확해 볼까요?", style = MaterialTheme.typography.titleLarge)
                         Text(
                             nextDue?.let { "다음 복습: " + SimpleDateFormat("M월 d일", Locale.KOREA).format(Date(it)) }
                                 ?: "문제를 학습하면 복습 일정이 잡혀요",

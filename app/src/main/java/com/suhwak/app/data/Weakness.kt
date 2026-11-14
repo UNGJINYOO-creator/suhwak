@@ -36,7 +36,7 @@ object TypeStats {
 
     /** 유형별 정답률 (수학 풀기 답만). */
     fun rates(answers: List<AnswerEntry>): List<Rate> =
-        answers.filter { it.mode == StudyMode.SOLVE && it.pos.isNotBlank() }
+        answers.filter { it.mode == StudyMode.SOLVE && it.pos.isNotBlank() && !it.guessed }
             .groupBy { it.pos }
             .map { (c, l) -> Rate(c, l.count { it.correct }, l.size) }
 

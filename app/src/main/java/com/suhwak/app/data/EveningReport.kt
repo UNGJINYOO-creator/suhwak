@@ -107,13 +107,13 @@ object EveningReport {
             .map { l -> l.first().text to l.count { !it.correct } }
             .filter { it.second >= 2 }.sortedByDescending { it.second }
         val guessMs = StudySettings(context).guessMs
-        val guesses = if (guessMs <= 0) 0 else answers.count { it.mode == StudyMode.CHOICE && it.ms in 1 until guessMs }
+        val guesses = answers.count { it.guessed || (guessMs > 0 && it.mode == StudyMode.CHOICE && it.ms in 1 until guessMs) }
         val worry = listOfNotNull(
             weakest(byPos)?.let { "${it.first} 정답률 ${it.second}%" },
             missedMany.takeIf { it.isNotEmpty() }?.let { l ->
                 "2번 이상 틀린 단어: " + l.take(5).joinToString(", ") { it.first } + if (l.size > 5) " 등" else ""
             },
-            if (guesses >= 5) "${StudySettings.secondsText(guessMs)}초 안에 찍은 객관식 ${guesses}개" else null,
+            if (guesses >= 3) "너무 빨리 낸(찍은) 답 ${guesses}개" else null,
         )
 
         return buildString {

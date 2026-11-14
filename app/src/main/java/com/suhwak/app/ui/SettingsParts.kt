@@ -337,7 +337,7 @@ object Opt {
     val leave = listOf(1 to "1번", 2 to "2번", 3 to "3번")
     val recentShare = listOf(70 to "70%", 90 to "90%", 100 to "100%")
     val recentDays = listOf(3 to "3일", 7 to "7일", 14 to "14일")
-    val idle = listOf(20 to "20초", 30 to "30초", 60 to "60초")
+    val idle = listOf(60 to "1분", 120 to "2분", 180 to "3분", 300 to "5분")
     val tries = listOf(0 to "무제한", 1 to "1번", 3 to "3번")
     val twins = listOf(0 to "끔", 2 to "2문제", 3 to "3문제")
     val weakDaily = listOf(0 to "끔", 1 to "1문제", 2 to "2문제")

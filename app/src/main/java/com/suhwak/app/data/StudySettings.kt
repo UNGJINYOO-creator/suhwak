@@ -62,7 +62,8 @@ class StudySettings(context: Context) {
     val guessMs: Long get() = guessTenths * 100L
 
     var idleSeconds: Int
-        get() = prefs.getInt("idleSeconds", 20)
+        // 수학은 공책에 풀며 생각하는 시간이 길어서 3분 동안 아무 입력이 없을 때 멈춘다 (화면을 만지거나 풀이 칸에 쓰면 계속)
+        get() = prefs.getInt("idleSeconds", 180)
         set(v) = prefs.edit().putInt("idleSeconds", v).apply()
 
     /** Words to learn per day (right in a quiz), 0 = no goal; also the new words in 오늘 학습. */
@@ -177,6 +178,31 @@ class StudySettings(context: Context) {
         get() = prefs.getInt("weakMin", 3)
         set(v) = prefs.edit().putInt("weakMin", v).apply()
 
+    /**
+     * 찍기 막기 (수학): 이 시간보다 빨리 낸 답은 찍은 것으로 보고 열매·목표·정답률·복습 기록에서 뺀다. 0.1초 단위(tenths), 0 = 끔.
+     * 객관식은 난이도별(쉬움 3초 · 보통 5초 · 어려움 8초), 답을 쓰는 문제는 10초.
+     */
+    var guessEasyTenths: Int
+        get() = prefs.getInt("guessEasy", 30)
+        set(v) = prefs.edit().putInt("guessEasy", v).apply()
+    var guessNormalTenths: Int
+        get() = prefs.getInt("guessNormal", 50)
+        set(v) = prefs.edit().putInt("guessNormal", v).apply()
+    var guessHardTenths: Int
+        get() = prefs.getInt("guessHard", 80)
+        set(v) = prefs.edit().putInt("guessHard", v).apply()
+    var guessTypedTenths: Int
+        get() = prefs.getInt("guessTyped", 100)
+        set(v) = prefs.edit().putInt("guessTyped", v).apply()
+
+    /** 이 문제의 찍기 기준 (ms). [qtype] "mc" = 객관식, [level] 쉬움·보통·어려움. */
+    fun guessMsFor(qtype: String, level: String): Long = 100L * when {
+        qtype != "mc" -> guessTypedTenths
+        level.contains("쉬") -> guessEasyTenths
+        level.contains("어려") -> guessHardTenths
+        else -> guessNormalTenths
+    }
+
     /** Questions in 시험 모드. */
     var testSize: Int
         get() = prefs.getInt("testSize", 20)
@@ -235,7 +261,7 @@ class StudySettings(context: Context) {
 
     /** Minimum study time per day in minutes, 0 = no goal. */
     var dailyGoalMinutes: Int
-        get() = prefs.getInt("dailyGoal", 0)
+        get() = prefs.getInt("dailyGoal", 30)
         set(v) = prefs.edit().putInt("dailyGoal", v).apply()
 
     var telegramToken: String

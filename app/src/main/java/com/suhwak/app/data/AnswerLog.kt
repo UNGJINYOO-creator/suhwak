@@ -20,6 +20,8 @@ data class AnswerEntry(
     val response: String,
     /** Time from showing the question to answering. */
     val ms: Long,
+    /** 찍기 막기 기준보다 빨리 낸 답 (정답률·리포트에서 따로 센다). */
+    val guessed: Boolean = false,
 )
 
 /** Quiz answers per day, one tab-separated file per day in the app's files folder; 35 days are kept. */
@@ -34,6 +36,7 @@ class AnswerLog(context: Context) {
     fun add(e: AnswerEntry) {
         val line = listOf(
             e.time, e.wordId, clean(e.text), e.pos, e.mode.name, if (e.correct) 1 else 0, if (e.isNew) 1 else 0, clean(e.response), e.ms,
+            if (e.guessed) 1 else 0,
         ).joinToString("\t")
         runCatching { File(dir, "${day()}.tsv").appendText(line + "\n") }
         prune()
@@ -46,7 +49,7 @@ class AnswerLog(context: Context) {
             val p = line.split('\t')
             if (p.size < 9) return@mapNotNull null
             runCatching {
-                AnswerEntry(p[0].toLong(), p[1].toLong(), p[2], p[3], StudyMode.valueOf(p[4]), p[5] == "1", p[6] == "1", p[7], p[8].toLong())
+                AnswerEntry(p[0].toLong(), p[1].toLong(), p[2], p[3], StudyMode.valueOf(p[4]), p[5] == "1", p[6] == "1", p[7], p[8].toLong(), p.getOrNull(9) == "1")
             }.getOrNull()
         }
     }

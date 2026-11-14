@@ -60,7 +60,7 @@ import java.util.Locale
 
 private const val CIRCLES = "①②③④⑤"
 
-/** 이보다 빨리 낸 답은 "공책에 풀었나요?"를 묻는다 (기록에서도 찍은 것으로 본다, StudyViewModel.mark). */
+/** 찍기 막기 기준이 없을 때 (설정에서 문제마다 정함: StudySettings.guessMsFor). */
 const val SOLVE_FAST_MS = 10_000L
 
 /**
@@ -83,6 +83,8 @@ fun SolveQuiz(
     onActivity: () -> Unit,
     modifier: Modifier = Modifier,
     badge: String? = null,
+    /** 이보다 빨리 낸 1차 답은 "공책에 풀었나요?"를 묻는다 (기록에서도 찍은 것으로 본다). 0 = 묻지 않음. */
+    fastMs: Long = SOLVE_FAST_MS,
 ) {
     val context = LocalContext.current
     val notebook = remember { NotebookCopy(context) }
@@ -142,7 +144,7 @@ fun SolveQuiz(
     }
 
     fun tryHarvest() {
-        if (stage == 0 && System.currentTimeMillis() - shownAt < SOLVE_FAST_MS) askFast = true else harvest()
+        if (stage == 0 && fastMs > 0 && System.currentTimeMillis() - shownAt < fastMs) askFast = true else harvest()
     }
 
     val header: @Composable () -> Unit = {

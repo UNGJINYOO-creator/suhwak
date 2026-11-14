@@ -784,6 +784,9 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
     }
 
     /** 씨앗 풀기 결과: 몇 차에 맞혔는지(1, 2, 3). 1차만 '한 번에 맞힘'. 다음 문제를 누르면 [next]로 기록된다. */
+    /** 찍기 막기: 이 문제를 이보다 빨리 내면 찍은 것으로 본다 (난이도·문제 종류별 설정). */
+    fun fastMs(word: Word): Long = settings.guessMsFor(word.qtype, word.level)
+
     fun solveAnswered(tries: Int, response: String, wrongs: List<String> = emptyList()) {
         touch()
         solveTries = tries
@@ -811,7 +814,7 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
         // A 객관식 answer picked faster than the 찍기 limit (설정, default 1초) is a guess: no stars, no goal, no right rate.
         val guessed = (mode == StudyMode.CHOICE && answerMs in 1 until settings.guessMs) ||
             // 수확중 찍기 방지: 공책에 풀 시간도 없이(10초 안) 낸 답은 맞혀도 열매로 세지 않는다
-            (mode == StudyMode.SOLVE && answerMs in 1 until SOLVE_FAST_MS)
+            (mode == StudyMode.SOLVE && answerMs in 1 until settings.guessMsFor(word.qtype, word.level))
         if (guessed && answer != Answer.UNKNOWN) {
             celebrate(if (mode == StudyMode.SOLVE) "너무 빨라요! 공책에 풀고 내요" else "너무 빨라요! 정답을 읽고 골라요 🙂", sound = false)
         }
@@ -827,6 +830,7 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
                     isNew = word.id !in reviewedBefore,
                     response = if (answer == Answer.UNKNOWN) lastResponse else "",
                     ms = answerMs.takeIf { it > 0 } ?: (System.currentTimeMillis() - questionAt),
+                    guessed = guessed,
                 ),
             )
         }
@@ -1210,6 +1214,7 @@ fun StudyScreen(
                                     word = word,
                                     number = vm.doneCount + 1,
                                     onAnswered = vm::solveAnswered,
+                                    fastMs = vm.fastMs(word),
                                     onNext = vm::next,
                                     onActivity = vm::touch,
                                     modifier = Modifier.weight(1f),

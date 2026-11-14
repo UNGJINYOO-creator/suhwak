@@ -1003,7 +1003,7 @@ private fun TodayCard(
             } else if (dueCount + newCount > 0) {
                 PrimaryButton("🌱 오늘의 수확 시작", onToday)
             } else {
-                Text("오늘 할 문제를 다 했어요 👍", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                Text("오늘 문제를 다 풀었어요 👍 더 풀면 열매가 더 열려요 🍎", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
             }
         }
     }

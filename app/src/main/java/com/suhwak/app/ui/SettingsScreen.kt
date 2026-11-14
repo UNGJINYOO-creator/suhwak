@@ -530,7 +530,7 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                 }
                 Group(
                     "⚙️ 고급",
-                    "카드 ${hand}장씩 돌리기 · 최근 문제 ${recentShare}% · ${idle}초 멈춤",
+                    "카드 ${hand}장씩 돌리기 · 최근 문제 ${recentShare}% · ${if (idle >= 60 && idle % 60 == 0) "${idle / 60}분" else "${idle}초"} 멈춤",
                     open == "advanced", { toggle("advanced") },
                 ) {
                     Body {
@@ -564,12 +564,21 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                         }
                         Spacer(Modifier.height(12.dp))
                         Text("타이머 멈춤", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-                        Labeled("이 시간 동안 화면을 안 건드리면 학습 시간이 멈춰요") {
+                        Labeled("이 시간 동안 화면을 만지지 않고 풀이 칸에도 쓰지 않으면 학습 시간이 멈춰요 (다시 만지면 이어서)") {
                             NumberChoice(idle, Opt.idle, "초", 600, min = 5) { idle = it; settings.idleSeconds = it }
                         }
                         Spacer(Modifier.height(12.dp))
                         Text("찍기 막기", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-                        GuessLimitField(settings)
+                        Text(
+                            "이 시간보다 빨리 낸 답은 찍은 것으로 봐요: 열매·오늘 목표·정답률·복습·오답노트에 안 들어가고, " +
+                                "저녁 리포트에 '찍은 답'으로 따로 알려요. 0.1초 단위, 0을 쓰면 꺼져요",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.outline,
+                        )
+                        SecondsField("객관식 · 쉬움", settings.guessEasyTenths) { settings.guessEasyTenths = it }
+                        SecondsField("객관식 · 보통", settings.guessNormalTenths) { settings.guessNormalTenths = it }
+                        SecondsField("객관식 · 어려움", settings.guessHardTenths) { settings.guessHardTenths = it }
+                        SecondsField("답을 쓰는 문제", settings.guessTypedTenths) { settings.guessTypedTenths = it }
                         Text(
                             "맞힌 문제는 처음 1일 뒤에 복습으로 나오고, 맞힐 때마다 간격이 1.4배(외웠어요는 2.2배)로 늘어요. " +
                                 "틀리면 간격이 절반으로 줄고 오늘 다시 나와요.",
@@ -847,6 +856,30 @@ private fun UpdateCard() {
 }
 
 /** 객관식 찍기 limit in seconds (0.1s steps, 0 = off); saved as it is typed. */
+/** 초를 0.1초 단위로 쓰는 칸 (찍기 막기 기준). [tenths]: 0.1초 단위 값. */
+@Composable
+private fun SecondsField(label: String, tenths: Int, onSet: (Int) -> Unit) {
+    var text by remember { mutableStateOf(StudySettings.secondsText(tenths * 100L)) }
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        OutlinedTextField(
+            value = text,
+            onValueChange = { v ->
+                val clean = v.filter { it.isDigit() || it == '.' }
+                val dot = clean.indexOf('.')
+                text = (if (dot < 0) clean else clean.substring(0, dot + 1) + clean.substring(dot + 1).replace(".", "").take(1)).take(4)
+                text.toDoubleOrNull()?.let { onSet(Math.round(it * 10).toInt().coerceIn(0, 600)) }
+            },
+            suffix = { Text("초") },
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyMedium,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            modifier = Modifier.width(110.dp),
+        )
+    }
+}
+
+@Suppress("unused")
 @Composable
 private fun GuessLimitField(settings: StudySettings) {
     var text by remember { mutableStateOf(StudySettings.secondsText(settings.guessMs)) }
