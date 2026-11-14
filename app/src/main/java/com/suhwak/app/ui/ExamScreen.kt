@@ -47,6 +47,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
+import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.suhwak.app.data.AppDatabase
@@ -209,13 +213,8 @@ class ExamViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMod
     private val startedAt = System.currentTimeMillis()
 
     companion object {
-        val Factory = androidx.lifecycle.viewmodel.viewModelFactory {
-            androidx.lifecycle.viewmodel.initializer {
-                ExamViewModel(
-                    this[androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY]!!,
-                    androidx.lifecycle.createSavedStateHandle(),
-                )
-            }
+        val Factory = viewModelFactory {
+            initializer { ExamViewModel(this[APPLICATION_KEY]!!, createSavedStateHandle()) }
         }
     }
 
