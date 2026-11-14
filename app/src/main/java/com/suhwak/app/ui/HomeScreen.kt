@@ -190,6 +190,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var wrongCount by mutableIntStateOf(0)
         private set
+    /** 오늘 간격 복습할 유형 수 (유형 단위 복습). */
+    var typeDue by mutableIntStateOf(0)
+        private set
     /** 오늘 다시 볼 유형 수 (쌍둥이에서도 틀린 유형). */
     var weakDue by mutableIntStateOf(0)
         private set
@@ -229,6 +232,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         totalLearned = stats.totalLearned
         wrongCount = wrongNote.ids.size
         weakDue = weakTypes.dueToday().size
+        typeDue = if (settings.reviewDaily > 0) minOf(com.suhwak.app.data.TypeReview(getApplication()).dueToday().size, settings.reviewDaily) else 0
         val timeLeft = settings.dailyGoalMinutes > 0 && stats.studyMs < settings.dailyGoalMinutes * 60_000L
         val wordsLeft = settings.dailyGoalMinutes <= 0 && settings.dailyWords > 0 && stats.learnedCount < settings.dailyWords
         fishOpen = !timeLeft && !wordsLeft && fishing.triesLeft > 0
@@ -487,7 +491,7 @@ fun HomeScreen(
 
     // 홈 조각들: 휴대폰·세로 태블릿은 위에서 아래로 한 줄, 가로 태블릿은 왼쪽(바구니)·오른쪽(과수원) 두 칸
     val todayPart: @Composable () -> Unit = {
-        TodayCard(dueCount, minOf(newCount, StudyViewModel.newPerDay(vm.settings)), vm.todayMs, vm.goalMs, vm.streak, vm.stars, vm.level, vm.known, vm.total, vm.learned, vm.goalWords, vm.totalMs, vm.totalLearned, onToday)
+        TodayCard(dueCount + vm.typeDue, minOf(newCount, StudyViewModel.newPerDay(vm.settings)), vm.todayMs, vm.goalMs, vm.streak, vm.stars, vm.level, vm.known, vm.total, vm.learned, vm.goalWords, vm.totalMs, vm.totalLearned, onToday)
     }
     val chipsPart: @Composable () -> Unit = {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

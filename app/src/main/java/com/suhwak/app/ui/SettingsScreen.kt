@@ -213,6 +213,9 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                 var twins by remember { mutableIntStateOf(settings.twinCount) }
                 var weakDaily by remember { mutableIntStateOf(settings.weakDaily) }
                 var weakClear by remember { mutableIntStateOf(settings.weakClear) }
+                var reviewDaily by remember { mutableIntStateOf(settings.reviewDaily) }
+                var reviewDays by remember { mutableStateOf(settings.reviewDays) }
+                var editDays by remember { mutableStateOf(false) }
                 var shuffle by remember { mutableStateOf(settings.shuffle) }
                 var backFirst by remember { mutableStateOf(settings.backFirst) }
                 var textScale by remember { mutableStateOf(settings.textScale) }
@@ -258,7 +261,7 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                 Group(
                     "📚 풀기",
                     (if (size > 0) "한 번에 ${size}문제" else "한 번에 전부") + " · 쌍둥이 " + (if (twins > 0) "${twins}문제" else "끔") +
-                        " · 다시 보기 " + (if (weakDaily > 0) "하루 ${weakDaily}문제" else "끔"),
+                        " · 복습 " + (if (reviewDaily > 0) com.suhwak.app.data.TypeReview.parseDays(reviewDays).joinToString("·") + "일" else "끔"),
                     open == "study", { toggle("study") },
                 ) {
                     Body {
@@ -270,6 +273,18 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                         Labeled("쌍둥이 문제", "3차(빈칸 풀이)까지 간 문제 뒤에 같은 유형 문제를 바로 이어서 내요") {
                             NumberChoice(twins, Opt.twins, "문제", 5, min = 0) { twins = it; settings.twinCount = it }
                         }
+                        Labeled("간격 복습 (유형 단위)", "맞힌 유형을 정한 날에 숫자만 바꾼 쌍둥이 문제로 다시 내요. 하루에 이만큼 유형까지") {
+                            NumberChoice(reviewDaily, Opt.reviewDaily, "유형", 50, min = 0) { reviewDaily = it; settings.reviewDaily = it }
+                        }
+                        if (reviewDaily > 0) {
+                            Labeled("복습 간격", "1차에 맞히면 다음 간격으로 늘고, 3차·풀이까지 가면 한 단계 줄여 내일 다시 · 마지막 간격까지 맞히면 졸업") {
+                                Choice(reviewDays, Opt.reviewDays + listOfNotNull(
+                                    (reviewDays to com.suhwak.app.data.TypeReview.parseDays(reviewDays).joinToString("·") + "일")
+                                        .takeIf { cur -> Opt.reviewDays.none { it.first == cur.first } },
+                                )) { reviewDays = it; settings.reviewDays = it }
+                                TextButton(onClick = { editDays = true }) { Text("직접 정하기") }
+                            }
+                        }
                         Labeled("다시 볼 유형", "쌍둥이에서도 틀린 유형을 다음 날부터 하루에 이만큼 다시 내요") {
                             NumberChoice(weakDaily, Opt.weakDaily, "문제", 5, min = 0) { weakDaily = it; settings.weakDaily = it }
                         }
@@ -277,6 +292,19 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}) {
                             Labeled("다시 보기 졸업", "다시 보기 문제를 1차에 이만큼(서로 다른 날) 맞히면 그만 내요") {
                                 NumberChoice(weakClear, Opt.weakClear, "번", 7) { weakClear = it; settings.weakClear = it }
                             }
+                        }
+                        if (editDays) {
+                            TextInputDialog(
+                                title = "복습 간격 (일)",
+                                label = "쉼표로: 예) 1,3,7,14",
+                                initial = reviewDays,
+                                confirmText = "저장",
+                                onDismiss = { editDays = false },
+                                onConfirm = { t ->
+                                    val v = com.suhwak.app.data.TypeReview.parseDays(t).joinToString(",")
+                                    reviewDays = v; settings.reviewDays = v; editDays = false
+                                },
+                            )
                         }
                         Labeled("시험 문제 수") {
                             NumberChoice(testSize, Opt.test, "문제", 200) { testSize = it; settings.testSize = it }

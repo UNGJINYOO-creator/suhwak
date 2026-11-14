@@ -78,13 +78,14 @@ interface WordDao {
     fun observeAllWords(): Flow<List<Word>>
 
     /** Words learned before whose review time has come. */
-    @Query("SELECT * FROM words WHERE box > 0 AND dueAt <= :now AND excluded = 0")
+    // 수학 씨앗(qtype이 있는 문제)은 문제 하나가 아니라 유형 단위로 복습한다 (TypeReview): 같은 문제를 다시 내지 않게 여기서 뺀다.
+    @Query("SELECT * FROM words WHERE box > 0 AND dueAt <= :now AND excluded = 0 AND qtype = ''")
     suspend fun getDueWords(now: Long): List<Word>
 
-    @Query("SELECT COUNT(*) FROM words WHERE box > 0 AND dueAt <= :time AND excluded = 0")
+    @Query("SELECT COUNT(*) FROM words WHERE box > 0 AND dueAt <= :time AND excluded = 0 AND qtype = ''")
     suspend fun countDue(time: Long): Int
 
-    @Query("SELECT COUNT(*) FROM words WHERE box > 0 AND dueAt <= :now AND excluded = 0")
+    @Query("SELECT COUNT(*) FROM words WHERE box > 0 AND dueAt <= :now AND excluded = 0 AND qtype = ''")
     fun observeDueCount(now: Long): Flow<Int>
 
     @Delete

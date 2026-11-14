@@ -83,7 +83,9 @@ object EveningReport {
             add(Calendar.DAY_OF_YEAR, 1)
             set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 59); set(Calendar.SECOND, 59)
         }.timeInMillis
-        val due = dao.countDue(endOfTomorrow)
+        // 내일 복습: 영어 단어처럼 문제 하나씩 복습하는 것 + 유형 단위 간격 복습
+        val due = dao.countDue(endOfTomorrow) +
+            if (settings.reviewDaily > 0) minOf(TypeReview(context).countDue(TypeReview.today() + 1), settings.reviewDaily) else 0
         val newWords = settings.dailyWords.takeIf { it > 0 } ?: 10
         val right = answers.count { it.correct }
 

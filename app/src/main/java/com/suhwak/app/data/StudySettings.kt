@@ -135,6 +135,18 @@ class StudySettings(context: Context) {
         get() = prefs.getInt("weakClear", 1)
         set(v) = prefs.edit().putInt("weakClear", v).apply()
 
+    /** 간격 복습(유형 단위): 맞힌 유형을 다시 내는 날 간격, 쉼표로 (기본 1·3·7·14일). */
+    var reviewDays: String
+        get() = prefs.getString("reviewDays", "1,3,7,14") ?: "1,3,7,14"
+        set(v) = prefs.edit().putString("reviewDays", v).apply()
+
+    val reviewDayList: List<Int> get() = TypeReview.parseDays(reviewDays)
+
+    /** 간격 복습: 하루에 복습으로 내는 유형 수 (유형마다 쌍둥이 1문제, 0 = 끔). */
+    var reviewDaily: Int
+        get() = prefs.getInt("reviewDaily", 10)
+        set(v) = prefs.edit().putInt("reviewDaily", v).apply()
+
     /** Questions in 시험 모드. */
     var testSize: Int
         get() = prefs.getInt("testSize", 20)

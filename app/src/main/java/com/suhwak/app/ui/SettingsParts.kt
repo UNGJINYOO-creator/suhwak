@@ -341,6 +341,8 @@ object Opt {
     val tries = listOf(0 to "무제한", 1 to "1번", 3 to "3번")
     val twins = listOf(0 to "끔", 2 to "2문제", 3 to "3문제")
     val weakDaily = listOf(0 to "끔", 1 to "1문제", 2 to "2문제")
+    val reviewDaily = listOf(0 to "끔", 5 to "5유형", 10 to "10유형", 20 to "20유형")
+    val reviewDays = listOf("1,3,7,14" to "1·3·7·14일", "1,2,4,8,16" to "1·2·4·8·16일", "2,5,10,20,40" to "2·5·10·20·40일")
     val weakClear = listOf(1 to "1번", 2 to "2번", 3 to "3번")
     val textScale = listOf(0.85f to "작게", 1f to "보통", 1.2f to "크게")
 

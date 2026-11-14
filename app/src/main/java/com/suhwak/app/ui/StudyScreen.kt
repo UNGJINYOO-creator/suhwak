@@ -283,6 +283,9 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
     /** 모든 씨앗 (쌍둥이·다시 보기 문제를 고르는 곳). */
     private var allSeeds = listOf<Word>()
     private val weakTypes = WeakTypes(app)
+    private val typeReview = com.suhwak.app.data.TypeReview(app)
+    /** 간격 복습으로 나온 문제 (wordId -> 유형). */
+    private val typeReviewOf = mutableMapOf<Long, String>()
     /** 문제 위에 붙는 표시: 쌍둥이 n/N, 다시 보기. */
     val badges = mutableStateMapOf<Long, String>()
     /** 다시 볼 유형으로 나온 문제 (wordId -> 유형). */
@@ -496,11 +499,23 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
      * 씨앗이 들어 있는 학습에서만, 시험에서는 넣지 않는다.
      */
     private fun withReview(words: List<Word>): List<Word> {
-        val per = settings.weakDaily
-        if (test || per <= 0 || words.none { it.isSeed }) return words
+        if (test) return words
         val inSession = words.map { it.id }.toHashSet()
         val extra = mutableListOf<Word>()
-        for (concept in weakTypes.dueToday()) {
+        val weakDue = weakTypes.dueToday()
+        // 간격 복습 (유형 단위): 오늘 학습·복습에서, 복습 날이 된 유형마다 숫자만 바꾼 쌍둥이 1문제 (안 푼 문제 먼저)
+        if ((today || review) && settings.reviewDaily > 0) {
+            for (concept in typeReview.dueToday().filter { it !in weakDue }.take(settings.reviewDaily)) {
+                val pick = twinCandidates(concept, inSession + extra.map { it.id }).firstOrNull() ?: continue
+                typeReviewOf[pick.id] = concept
+                reviewOf[pick.id] = concept
+                badges[pick.id] = "📅 복습"
+                extra += pick
+            }
+        }
+        val per = settings.weakDaily
+        if (per <= 0 || (words.none { it.isSeed } && extra.isEmpty())) return extra + words
+        for (concept in weakDue) {
             val picks = twinCandidates(concept, inSession + extra.map { it.id }).take(per)
             picks.forEach {
                 reviewOf[it.id] = concept
@@ -860,7 +875,12 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
             weakTypes.add(word.pos)
             if (word.pos !in weakAdded) weakAdded += word.pos
         }
-        reviewOf[word.id]?.let { concept ->
+        // 간격 복습 (유형 단위): 찍은 답은 빼고, 이 유형의 결과를 넣는다 (하루에 첫 결과만)
+        if (!guessed && word.pos.isNotBlank() && settings.reviewDaily > 0) {
+            val note = typeReview.result(word.pos, solveTries, settings.reviewDayList)
+            if (note != null && word.id in typeReviewOf) celebrate(note, sound = false)
+        }
+        if (word.id !in typeReviewOf) reviewOf[word.id]?.let { concept ->
             if (weakTypes.result(concept, firstTry, settings.weakClear)) celebrate("🎓 '$concept' 다시 보기 졸업!")
         }
         val chain = twinOf[word.id]
