@@ -324,24 +324,24 @@ data class WeeklyReport(
         fun good(): List<String> = buildList {
             best?.let { add("${it.label}요일에 ${minutes(it.ms)}분으로 가장 많이 공부했어요.") }
             if (accuracy != null && prevAccuracy != null && accuracy > prevAccuracy) add("정답률이 지난주보다 ${accuracy - prevAccuracy}%p 올라 ${accuracy}%예요.")
-            if (learned > prevLearned && prevLearned > 0) add("새로 익힌 단어가 지난주보다 ${learned - prevLearned}개 늘었어요.")
-            byPos.firstOrNull()?.takeIf { it.second >= 85 }?.let { add("${it.first} 정답률이 ${it.second}%로 탄탄해요.") }
+            if (learned > prevLearned && prevLearned > 0) add("새로 익힌 문제가 지난주보다 ${learned - prevLearned}개 늘었어요.")
+            byPos.firstOrNull()?.takeIf { it.second >= 85 }?.let { add("'${it.first}' 유형 정답률이 ${it.second}%로 탄탄해요.") }
             if (streak >= 3) add("${streak}일째 하루도 안 빠지고 공부하고 있어요.")
         }.take(3).ifEmpty { listOf("이번 주 공부 기록이 쌓이면 잘한 점을 찾아 드려요.") }
 
         fun watch(): List<String> = buildList {
             if (missed.isNotEmpty()) add("${missed.joinToString("·") { it.label }}요일에 하루 목표(${goalMinutes}분)를 못 채웠어요.")
             if (accuracy != null && prevAccuracy != null && accuracy < prevAccuracy - 2) add("정답률이 지난주보다 ${prevAccuracy - accuracy}%p 내려갔어요.")
-            byPos.lastOrNull()?.takeIf { it.second < 75 && byPos.size >= 2 }?.let { add("${it.first} 정답률이 ${it.second}%로 가장 낮아요.") }
+            byPos.lastOrNull()?.takeIf { it.second < 75 && byPos.size >= 2 }?.let { add("'${it.first}' 유형 정답률이 ${it.second}%로 가장 낮아요.") }
             reasons.firstOrNull()?.takeIf { it.second >= 3 }?.let { add("틀린 문제 중 '${it.first}'가 ${it.second}번으로 가장 많아요.") }
         }.take(3).ifEmpty { listOf("특별히 걱정할 부분은 없어요.") }
 
         fun plan(): List<String> = buildList {
-            if (dueThisWeek > 0) add("다음 7일 동안 복습할 단어가 ${dueThisWeek}개 있어요.")
+            if (dueThisWeek > 0) add("다음 7일 동안 복습할 문제가 ${dueThisWeek}개 있어요.")
             hardWords.take(3).takeIf { it.isNotEmpty() }?.let { list ->
                 add("자주 틀린 ${list.joinToString(", ") { it.text }}${if (hardWords.size > 3) " 등" else ""}을 다시 봐요.")
             }
-            byPos.lastOrNull()?.takeIf { it.second < 75 && byPos.size >= 2 }?.let { add("${it.first} 단어를 문제로 더 많이 내요(약점 맞춤).") }
+            byPos.lastOrNull()?.takeIf { it.second < 75 && byPos.size >= 2 }?.let { add("'${it.first}' 유형의 쌍둥이 문제를 더 많이 내요(약점 맞춤).") }
         }.take(3).ifEmpty { listOf("지금처럼 하루 목표를 채워 가요.") }
 
         fun tips(): List<String> = buildList {
@@ -351,7 +351,7 @@ data class WeeklyReport(
             }
             best?.let { add("${it.label}요일 ${minutes(it.ms)}분은 이번 주 최고 기록이에요. 꼭 칭찬해 주세요.") }
             if (missed.size >= 2) add("바쁜 요일에는 목표 시간을 조금 낮춰 보세요. 연속 기록이 이어지는 게 더 중요해요.")
-            if (dictation.second >= 5 && (dictation.first * 100 / dictation.second) < 70) add("듣고 쓰기가 어려워해요. 단어를 소리 내어 같이 읽어 보면 도움이 돼요.")
+            hardWords.firstOrNull()?.let { add("\"이 문제 어떻게 풀었어?\" 자주 틀린 문제의 풀이를 아이가 직접 설명하게 하면 같은 유형이 탄탄해져요.") }
         }.take(3)
     }
 }

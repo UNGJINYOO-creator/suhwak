@@ -1,5 +1,9 @@
 package com.suhwak.app.ui
 
+import com.suhwak.app.ui.theme.Sea
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.ui.draw.clip
 import android.app.Application
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -18,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -52,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.suhwak.app.data.MathWeek
 import com.suhwak.app.data.StudySettings
 import com.suhwak.app.data.WeeklyReport
 import kotlinx.coroutines.Dispatchers
@@ -62,9 +68,12 @@ class WeeklyReportViewModel(app: Application) : AndroidViewModel(app) {
     private val settings = StudySettings(app)
     var report by mutableStateOf<WeeklyReport?>(null)
         private set
+    var math by mutableStateOf<MathWeek?>(null)
+        private set
 
     fun load() {
         viewModelScope.launch {
+            math = withContext(Dispatchers.IO) { MathWeek.build(getApplication()) }
             report = withContext(Dispatchers.IO) { WeeklyReport.build(getApplication()) }
         }
     }
@@ -122,34 +131,7 @@ fun WeeklyReportScreen(onBack: () -> Unit, vm: WeeklyReportViewModel = viewModel
                     DayBars(r)
                 }
             }
-            if (r.byKind.isNotEmpty()) {
-                item {
-                    ReportPanel("공부 방법별 시간", "합계 ${r.byKind.sumOf { it.second } / 60_000}분") {
-                        val max = r.byKind.maxOf { it.second }.coerceAtLeast(1)
-                        r.byKind.forEach { (label, ms) -> HBar(label, ms / max.toFloat(), "${ms / 60_000}분") }
-                        if (r.byKind.sumOf { it.second } < r.totalMs * 0.8) {
-                            Muted("방법별 시간은 이번 업데이트부터 모으기 시작했어요. 다음 주부터 정확해져요.")
-                        }
-                    }
-                }
-            }
-            if (r.byBand.any { it.ms > 0 }) {
-                item {
-                    ReportPanel("공부한 시간대") {
-                        val max = r.byBand.maxOf { it.ms }.coerceAtLeast(1)
-                        r.byBand.forEach { b ->
-                            HBar(b.label, b.ms / max.toFloat(), "${b.ms / 60_000}분" + (b.accuracy?.let { " · 정답률 $it%" } ?: ""))
-                        }
-                        r.byBand.filter { it.accuracy != null }.let { list ->
-                            val best = list.maxByOrNull { it.accuracy!! }
-                            val worst = list.minByOrNull { it.accuracy!! }
-                            if (best != null && worst != null && best != worst && best.accuracy!! - worst.accuracy!! >= 5) {
-                                Muted("${best.label.substringBefore(" (")}에 가장 집중이 잘 됐어요(정답률 ${best.accuracy}%). ${worst.label.substringBefore(" (")}에는 ${worst.accuracy}%예요.")
-                            }
-                        }
-                    }
-                }
-            }
+            vm.math?.let { m -> mathPanels(m) }
             if (r.knownTrend.size >= 2) {
                 item {
                     ReportPanel("외운 문제 변화", "서로 다른 날 2번 이상 맞힌 문제만 셉니다") {
@@ -159,42 +141,8 @@ fun WeeklyReportScreen(onBack: () -> Unit, vm: WeeklyReportViewModel = viewModel
                     }
                 }
             }
-            item { StagesPanel(r.stages) }
-            item {
-                ReportPanel("다음 7일 복습 예정", "총 ${r.dueNext.sumOf { it.second }}개 · 잊어버리기 직전에 다시 보여 줘요") {
-                    DueBars(r.dueNext)
-                }
-            }
             if (r.decks.isNotEmpty()) item { DecksPanel(r.decks) }
-            if (r.byPos.isNotEmpty() || r.reasons.isNotEmpty()) {
-                item {
-                    ReportPanel("어디서 틀리나요") {
-                        if (r.byPos.isNotEmpty()) {
-                            SubTitle("품사별 정답률")
-                            r.byPos.forEach { (label, p) -> HBar(label, p / 100f, "$p%") }
-                        }
-                        if (r.reasons.isNotEmpty()) {
-                            SubTitle("틀린 이유 (총 ${r.reasons.sumOf { it.second }}번)")
-                            val max = r.reasons.maxOf { it.second }.coerceAtLeast(1)
-                            r.reasons.forEach { (label, n) -> HBar(label, n / max.toFloat(), "${n}번") }
-                        }
-                    }
-                }
-            }
             if (r.hardWords.isNotEmpty()) item { HardWordsPanel(r.hardWords) }
-            if (r.dictation.second > 0 || r.speech.first > 0) {
-                item {
-                    ReportPanel("듣기 · 말하기") {
-                        if (r.dictation.second > 0) {
-                            FactRow("듣고 쓰기 정답률", "${r.dictation.first * 100 / r.dictation.second}% (${r.dictation.second}문제)")
-                        }
-                        if (r.speech.first > 0) {
-                            FactRow("말하기 성공", "${r.speech.second} / ${r.speech.first}개")
-                            if (r.speech.third.isNotEmpty()) FactRow("발음이 어려웠던 문제", r.speech.third.take(5).joinToString(", "))
-                        }
-                    }
-                }
-            }
             if (r.fishing.isNotEmpty()) {
                 item {
                     ReportPanel("🧺 수확 일지", "수확에 성공한 날 ${r.fishing.size}일") {
@@ -211,7 +159,7 @@ fun WeeklyReportScreen(onBack: () -> Unit, vm: WeeklyReportViewModel = viewModel
             }
             item {
                 Muted(
-                    "이렇게 계산했어요 · 외운 문제 = 서로 다른 날 2번 이상 맞힌 문제 · 정답률 = 객관식·빈칸·듣고 쓰기·게임 문제 기준(정답 카드 넘기기는 빼요) " +
+                    "이렇게 계산했어요 · 외운 문제 = 서로 다른 날 2번 이상 맞힌 문제 · 1차 정답률 = 힌트 없이 처음에 맞힌 비율(너무 빨리 낸 답은 빼요) " +
                         "· 공부 시간 = 1분 넘게 손을 안 대면 멈추는 순수 공부 시간 · 등급은 한 번 오르면 내려가지 않아요 · 모든 기록은 이 폰 안에만 있어요.",
                 )
             }
@@ -438,60 +386,6 @@ private fun TrendLine(points: List<Pair<String, Int>>) {
 }
 
 @Composable
-private fun StagesPanel(s: WeeklyReport.Stages) {
-    val parts = listOf(
-        Triple("장기 기억", s.longTerm, StageColors[3]),
-        Triple("복습 중", s.reviewing, StageColors[2]),
-        Triple("학습 중", s.learning, StageColors[1]),
-        Triple("아직 안 배움", s.new, StageColors[0]),
-    )
-    val total = s.total.coerceAtLeast(1)
-    ReportPanel("전체 문제 기억 상태", "${s.total}개") {
-        Row(Modifier.fillMaxWidth().height(26.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            parts.filter { it.second > 0 }.forEach { (_, n, c) ->
-                Box(Modifier.weight(n.toFloat()).fillMaxHeight().background(c, RoundedCornerShape(4.dp)))
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-        parts.forEach { (label, n, c) ->
-            Row(Modifier.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(10.dp).background(c, RoundedCornerShape(3.dp)))
-                Spacer(Modifier.width(6.dp))
-                Text(label, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                Text("${n}개 · ${n * 100 / total}%", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-            }
-        }
-        Spacer(Modifier.height(4.dp))
-        Muted("학습 중 = 1~2일 간격으로 다시 보는 문제 · 복습 중 = 3~13일 간격 · 장기 기억 = 14일 넘게 지나도 맞히는 문제")
-    }
-}
-
-@Composable
-private fun DueBars(due: List<Pair<String, Int>>) {
-    val max = due.maxOf { it.second }.coerceAtLeast(1)
-    val color = StageColors[2]
-    Row(
-        Modifier.fillMaxWidth().height(110.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.Bottom,
-    ) {
-        due.forEach { (label, n) ->
-            Column(Modifier.weight(1f).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("$n", style = MaterialTheme.typography.labelSmall)
-                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
-                    Box(
-                        Modifier.width(22.dp)
-                            .fillMaxHeight((n / max.toFloat()).coerceIn(0.02f, 1f))
-                            .background(color, RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)),
-                    )
-                }
-                Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
-            }
-        }
-    }
-}
-
-@Composable
 private fun DecksPanel(decks: List<WeeklyReport.DeckRow>) {
     ReportPanel("문제집별 진도", "이번 주에 공부한 문제집") {
         decks.forEachIndexed { i, d ->
@@ -586,4 +480,84 @@ private fun Bullet(text: String) {
 @Composable
 private fun Muted(text: String) {
     Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(top = 4.dp))
+}
+
+/** 수학 패널들: 단원별 1차 정답률, 많이 틀린 유형 3개, 단원 시험 점수 흐름, 공부한 날 달력. */
+private fun LazyListScope.mathPanels(m: MathWeek) {
+    if (m.byUnit.isNotEmpty()) {
+        item {
+            ReportPanel("단원별 1차 정답률", "힌트 없이 처음에 맞힌 비율 · 최근 7일") {
+                m.byUnit.forEach { (unit, p, n) -> HBar(unit, p / 100f, "$p% · ${n}문제") }
+                m.byUnit.filter { it.third >= 5 }.minByOrNull { it.second }?.takeIf { it.second < 70 }?.let {
+                    Muted("${it.first.substringAfter(". ")} 단원은 한 번 더 다지면 좋아요.")
+                }
+            }
+        }
+    }
+    if (m.wrongTypes.isNotEmpty()) {
+        item {
+            ReportPanel("많이 틀린 유형", "같은 유형의 쌍둥이 문제가 다시 나와요") {
+                m.wrongTypes.forEachIndexed { i, (type, misses, p) -> FactRow("${i + 1}. $type", "${misses}번 틀림 · 정답률 $p%") }
+            }
+        }
+    }
+    if (m.exams.isNotEmpty()) {
+        item {
+            ReportPanel("⚔️ 단원 종합시험 점수", "100점 만점 · 최근 기록 순서") {
+                m.exams.forEach { e ->
+                    FactRow("${e.unit}. ${e.name}", "최고 ${e.best}점")
+                    Text(
+                        e.scores.joinToString(" → ") { "${it}점" },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Sea.Soft,
+                        modifier = Modifier.padding(bottom = 6.dp),
+                    )
+                }
+            }
+        }
+    }
+    if (m.calendar.any { it.second > 0 }) {
+        item {
+            ReportPanel("공부한 날", "최근 4주 · 진할수록 많이 풀었어요") { StudyCalendar(m.calendar) }
+        }
+    }
+}
+
+@Composable
+private fun StudyCalendar(days: List<Pair<java.time.LocalDate, Int>>) {
+    val names = listOf("월", "화", "수", "목", "금", "토", "일")
+    // 월요일부터 시작하게 앞을 빈칸으로 채운다
+    val pad = days.first().first.dayOfWeek.value - 1
+    val cells: List<Pair<java.time.LocalDate, Int>?> = List(pad) { null } + days
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        names.forEach { Text(it, style = MaterialTheme.typography.labelSmall, color = Sea.Soft, textAlign = TextAlign.Center, modifier = Modifier.weight(1f)) }
+    }
+    cells.chunked(7).forEach { week ->
+        Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            week.forEach { c ->
+                val color = when {
+                    c == null -> Color.Transparent
+                    c.second == 0 -> Sea.Empty
+                    c.second < 10 -> Sea.MintCard
+                    c.second < 25 -> Sea.MintCardOpen
+                    else -> Sea.Mint
+                }
+                Box(
+                    Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(8.dp)).background(color),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (c != null) {
+                        Text(
+                            if (c.second > 0) "${c.second}" else "${c.first.dayOfMonth}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (c.second >= 25) Color.White else if (c.second > 0) Sea.Deep else Sea.Soft,
+                        )
+                    }
+                }
+            }
+            repeat(7 - week.size) { Spacer(Modifier.weight(1f)) }
+        }
+    }
+    val studied = days.count { it.second > 0 }
+    Muted("4주 중 ${studied}일 공부했어요 · 칸 안의 숫자는 푼 문제 수예요")
 }

@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -232,7 +233,7 @@ private fun Message(icon: String, text: String, action: @Composable () -> Unit) 
 }
 
 @Composable
-private fun Playing(vm: FarmViewModel) {
+private fun ColumnScope.Playing(vm: FarmViewModel) {
     // 밭: 한 줄에 3칸
     Column(
         Modifier.widthIn(max = 520.dp).fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Sea.MintCard).padding(10.dp),
