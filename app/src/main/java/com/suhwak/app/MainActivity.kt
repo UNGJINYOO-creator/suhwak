@@ -130,6 +130,8 @@ private fun AppContent() {
                 val nav = rememberNavController()
                 val entry by nav.currentBackStackEntryAsState()
                 val route = entry?.destination?.route
+                val screenConfig = androidx.compose.ui.platform.LocalConfiguration.current
+                val wideScreen = screenConfig.screenWidthDp >= 900 && screenConfig.screenWidthDp > screenConfig.screenHeightDp
                 Scaffold(
                     contentWindowInsets = WindowInsets(0),
                     bottomBar = {
@@ -178,7 +180,9 @@ private fun AppContent() {
                         navController = nav,
                         startDestination = "home",
                         // imePadding: every screen shrinks above the keyboard instead of being covered by it.
-                        modifier = Modifier.widthIn(max = 840.dp).fillMaxWidth().imePadding(),
+                        // 가로 태블릿에서는 홈과 풀이 화면을 화면 폭에 맞게 넓게 (다른 화면은 읽기 좋은 폭 840dp)
+                        modifier = Modifier.widthIn(max = if (wideScreen && (route == "home" || route?.startsWith("study") == true)) 1600.dp else 840.dp)
+                            .fillMaxWidth().imePadding(),
                     ) {
                         composable("home") {
                             HomeScreen(

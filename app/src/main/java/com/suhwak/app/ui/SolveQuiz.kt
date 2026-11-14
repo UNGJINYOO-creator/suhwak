@@ -237,7 +237,9 @@ Text(if (stage == 2 && !clozeDone) "빈칸을 먼저 채워요" else "🍎 수�
     BoxWithConstraints(modifier) {
         if (maxWidth >= 700.dp) {
             // 태블릿: 왼쪽 문제, 오른쪽 답 (채점하기는 오른쪽 아래에 고정)
-            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+            // 아주 넓은 화면(가로 태블릿): 답 쪽은 숫자판이 쓰기 좋은 폭(440dp)으로 두고 나머지는 모두 문제·풀이에
+            val roomy = maxWidth >= 1000.dp
+            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(if (roomy) 28.dp else 18.dp)) {
                 Column(
                     Modifier.weight(1.15f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -247,7 +249,10 @@ Text(if (stage == 2 && !clozeDone) "빈칸을 먼저 채워요" else "🍎 수�
                     feedback()
                     clozePart()
                 }
-                Column(Modifier.weight(0.85f).fillMaxHeight().padding(horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(
+                    (if (roomy) Modifier.width(440.dp) else Modifier.weight(0.85f)).fillMaxHeight().padding(horizontal = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
                     Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(if (mc) "답 고르기" else "답 쓰기", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         if (mc) {
