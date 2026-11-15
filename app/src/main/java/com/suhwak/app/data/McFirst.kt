@@ -117,7 +117,7 @@ class McFirst(context: Context) {
                     if (q == 0L) return null
                     val neg = sign == "-"
                     fun f(a: Long, b: Long, minus: Boolean = neg) = if (a <= 0 || b <= 1 || a % b == 0L) null else "${if (minus) "-" else ""}$a/$b"
-                    val cands = listOfNotNull(f(p, q, !neg), f(q, p), f(p + 1, q), f(p, q + 1), f(p - 1, q), f(p, q - 1), f(p * 2, q), f(p + q, q))
+                    val cands = listOfNotNull(f(p, q, !neg), f(q, p), f(p + 1, q), f(p, q + 1), f(p - 1, q), f(p, q - 1), f(p * 2, q), f(p + q, q), f(p + 2, q), f(p, q + 2), f(p + 1, q + 1), f(p * 2, q + 1))
                     val value = (if (neg) -1.0 else 1.0) * p / q
                     (listOf(cands[0]) + cands.drop(1).shuffled(rnd)).forEach { c ->
                         val m = FRAC.matchEntire(c)!!
