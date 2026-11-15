@@ -8,6 +8,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -39,12 +40,18 @@ import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.Dp
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import com.suhwak.app.ui.theme.Sea
 
 /** 풀이 칸의 한 획: 점들, 색, 굵기(dp). */
 private class InkStroke(val points: List<Offset>, val color: Color, val widthDp: Float)
 
-private enum class PadTool(val label: String) { PEN("펜"), RED("빨간 펜"), ERASER("지우개") }
+private enum class PadTool(val icon: String, val label: String) { PEN("✏️", "펜"), RED("🖍️", "빨간 펜"), ERASER("🧽", "지우개") }
 
 private val InkGreen = Color(0xFF1F2A14)
 private val InkRed = Color(0xFFC8372D)
@@ -58,27 +65,19 @@ private val RuleLine = Color(0xFFE3EAD2)
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun SolvePad(key: Any, onActivity: () -> Unit, modifier: Modifier = Modifier) {
+fun SolvePad(key: Any, onActivity: () -> Unit, modifier: Modifier = Modifier, minHeight: Dp = 160.dp) {
     val strokes = remember(key) { mutableStateListOf<InkStroke>() }
     val current = remember(key) { mutableStateListOf<Offset>() }
     var tool by remember(key) { mutableStateOf(PadTool.PEN) }
     var penSeen by remember { mutableStateOf(false) }
 
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("✏️ 풀이 칸", style = MaterialTheme.typography.titleSmall, color = Sea.Deep)
-            Spacer(Modifier.weight(1f))
-            PadTool.entries.forEach { t ->
-                PadButton(t.label, selected = tool == t) { tool = t }
-            }
-            PadButton("되돌리기", selected = false) { if (strokes.isNotEmpty()) strokes.removeAt(strokes.lastIndex) }
-            PadButton("전체 지우기", selected = false) { strokes.clear() }
-        }
+    // 도구는 풀이 칸 왼쪽 위에 세로로 붙인 작은 아이콘 (위쪽 줄을 따로 쓰지 않아 쓸 곳이 넓다)
+    BoxWithConstraints(modifier.heightIn(min = minHeight)) {
+        // 낮은 칸(폰)에서는 도구를 위에 가로로, 넉넉하면 왼쪽에 세로로
+        val vertical = maxHeight >= 250.dp
         Box(
             Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .heightIn(min = 200.dp)
+                .fillMaxSize()
                 .clip(RoundedCornerShape(18.dp))
                 .background(Color.White)
                 .border(1.5.dp, RuleLine, RoundedCornerShape(18.dp))
@@ -134,13 +133,21 @@ fun SolvePad(key: Any, onActivity: () -> Unit, modifier: Modifier = Modifier) {
             }
             if (strokes.isEmpty() && current.isEmpty()) {
                 Text(
-                    "여기에 식을 쓰면서 풀어요 (펜이나 손가락)",
+                    "✏️ 여기에 식을 쓰면서 풀어요",
                     style = MaterialTheme.typography.bodyMedium,
                     color = Sea.Soft.copy(alpha = 0.7f),
-                    modifier = Modifier.align(Alignment.Center),
+                    modifier = Modifier.align(Alignment.Center).padding(start = if (vertical) 48.dp else 0.dp, top = if (vertical) 0.dp else 48.dp),
                 )
             }
         }
+        val tools: @Composable () -> Unit = {
+            PadTool.entries.forEach { t -> PadButton(t.icon, t.label, selected = tool == t) { tool = t } }
+            PadButton("↶", "되돌리기", selected = false) { if (strokes.isNotEmpty()) strokes.removeAt(strokes.lastIndex) }
+            PadButton("🗑️", "전체 지우기", selected = false) { strokes.clear() }
+        }
+        val strip = Modifier.padding(6.dp).clip(RoundedCornerShape(22.dp)).background(Sea.Panel.copy(alpha = 0.94f)).padding(4.dp)
+        if (vertical) Column(strip, verticalArrangement = Arrangement.spacedBy(4.dp)) { tools() }
+        else Row(strip, horizontalArrangement = Arrangement.spacedBy(4.dp)) { tools() }
     }
 }
 
@@ -158,17 +165,16 @@ private fun DrawScope.drawInk(points: List<Offset>, color: Color, width: Float) 
 }
 
 @Composable
-private fun PadButton(label: String, selected: Boolean, onClick: () -> Unit) {
-    Text(
-        label,
-        style = MaterialTheme.typography.labelLarge,
-        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-        color = if (selected) Color.White else Sea.Deep,
-        modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(if (selected) Sea.Deep else Sea.MintCard)
+private fun PadButton(icon: String, label: String, selected: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .size(38.dp)
+            .clip(CircleShape)
+            .background(if (selected) Sea.Deep else Color.Transparent)
             .clickable(onClick = onClick)
-            .heightIn(min = 40.dp)
-            .padding(horizontal = 12.dp, vertical = 9.dp),
-    )
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(icon, fontSize = 18.sp, color = if (selected) Color.White else Sea.Deep)
+    }
 }

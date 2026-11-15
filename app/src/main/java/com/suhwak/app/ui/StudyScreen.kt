@@ -38,6 +38,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -1083,9 +1084,13 @@ fun StudyScreen(
     // Leaving in the middle of a session asks first, from the back button and the system back gesture.
     BackHandler(enabled = inSession) { confirmExit = true }
 
+    // 수학 풀기: 위쪽을 얇은 한 줄로 (← · 진행바 · ⏱ 타이머 · 3/30 · ⋮). 풀이 칸을 최대한 넓게.
+    val slim = inSession && vm.mode == StudyMode.SOLVE
     Scaffold(
         topBar = {
-            AppTopBar(
+            if (slim) {
+                SlimSolveBar(vm, onBack = { confirmExit = true }, onSettings = onSettings)
+            } else AppTopBar(
                 title = {
                     FitText(
                         if (vm.finished) "학습 결과"
@@ -1137,10 +1142,10 @@ fun StudyScreen(
                     val typing = vm.mode == StudyMode.SPELLING || vm.mode == StudyMode.DICTATION
                     Column(
                         Modifier.fillMaxSize().imePadding()
-                            .padding(horizontal = 24.dp, vertical = if (typing) 4.dp else 12.dp),
+                            .padding(horizontal = if (slim) 12.dp else 24.dp, vertical = if (typing || slim) 4.dp else 12.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        ThickProgress(vm.progress, Modifier.fillMaxWidth())
+                        if (!slim) ThickProgress(vm.progress, Modifier.fillMaxWidth())
                         val notes = listOfNotNull(
                             vm.modeNote,
                             if (word.flagged) "⚑ 수정 필요로 표시한 카드" else null,
@@ -1148,7 +1153,10 @@ fun StudyScreen(
                         )
                         // A fixed slot under the progress bar: combo cheers show here instead of over the word.
                         // It grows when a note wraps to a second line, so the text is never cut.
-                        Box(Modifier.fillMaxWidth().heightIn(min = 34.dp).padding(top = 6.dp), contentAlignment = Alignment.Center) {
+                        Box(
+                            Modifier.fillMaxWidth().heightIn(min = if (slim) 0.dp else 34.dp).padding(top = if (slim && notes.isEmpty()) 0.dp else 6.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
                             if (notes.isNotEmpty()) {
                                 Text(
                                     notes.joinToString(" · "),
@@ -1159,7 +1167,7 @@ fun StudyScreen(
                             }
                             CheerBanner(vm.cheer, vm.cheerId)
                         }
-                        Spacer(Modifier.height(if (typing) 8.dp else 16.dp))
+                        Spacer(Modifier.height(if (slim) 2.dp else if (typing) 8.dp else 16.dp))
                         val speak = { tts?.speak(word.text, TextToSpeech.QUEUE_FLUSH, null, "w${word.id}") }
                         // 말하기: speech recognition inside the app (no Google popup) checks the pronunciation.
                         var sayFeedback by remember(vm.turn) { mutableStateOf<String?>(null) }
@@ -1540,9 +1548,48 @@ private fun formatTime(ms: Long): String {
     return "%d:%02d".format(sec / 60, sec % 60)
 }
 
+/** 수학 풀기 화면의 얇은 윗줄: ← · 진행바 · ⏱ 타이머 · 끝낸 문제/전체 · ⋮(별표·설정). */
+@Composable
+private fun SlimSolveBar(vm: StudyViewModel, onBack: () -> Unit, onSettings: () -> Unit) {
+    var menu by remember { mutableStateOf(false) }
+    Row(
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).statusBarsPadding().height(48.dp).padding(end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "뒤로") }
+        LinearProgressIndicator(
+            progress = { vm.progress },
+            modifier = Modifier.weight(1f).height(6.dp).clip(RoundedCornerShape(3.dp)),
+            trackColor = MaterialTheme.colorScheme.outlineVariant,
+            gapSize = 0.dp,
+            drawStopIndicator = {},
+        )
+        Spacer(Modifier.width(6.dp))
+        StudyTimer(vm, compact = true)
+        Text(
+            "${vm.doneCount}/${vm.sessionSize}",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            modifier = Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 8.dp, vertical = 3.dp),
+        )
+        Box {
+            IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "더 보기") }
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                val starred = vm.current?.bookmarked == true
+                DropdownMenuItem(
+                    text = { Text(if (starred) "⭐ 별표 지우기" else "☆ 별표 하기") },
+                    onClick = { menu = false; vm.toggleBookmark() },
+                )
+                DropdownMenuItem(text = { Text("⚙️ 설정") }, onClick = { menu = false; onSettings() })
+            }
+        }
+    }
+}
+
 /** "⏱ 3:12 / 10:00" in the top bar; shows a pause sign while the timer is stopped. */
 @Composable
-private fun StudyTimer(vm: StudyViewModel) {
+private fun StudyTimer(vm: StudyViewModel, compact: Boolean = false) {
     val goal = if (vm.goalMs > 0) " / ${formatTime(vm.goalMs)}" else ""
     var help by remember { mutableStateOf(false) }
     if (help) {
@@ -1569,8 +1616,9 @@ private fun StudyTimer(vm: StudyViewModel) {
     }
     Text(
         (if (vm.paused) "⏸ " else "⏱ ") + formatTime(vm.todayMs) + goal +
-            if (vm.goalWords > 0) "  🧠 ${vm.learnedToday}/${vm.goalWords}" else "",
-        style = MaterialTheme.typography.titleSmall,
+            if (vm.goalWords > 0 && !compact) "  🧠 ${vm.learnedToday}/${vm.goalWords}" else "",
+        style = if (compact) MaterialTheme.typography.labelLarge else MaterialTheme.typography.titleSmall,
+        maxLines = 1,
         color = if (vm.paused) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary,
         modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { help = true }.padding(horizontal = 6.dp, vertical = 4.dp),
     )

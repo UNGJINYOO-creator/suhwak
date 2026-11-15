@@ -230,6 +230,11 @@ class StudySettings(context: Context) {
         get() = prefs.getInt("farmPlots", 6)
         set(v) = prefs.edit().putInt("farmPlots", v).apply()
 
+    /** 풀이 화면의 문제·보기 글자 크기 (%): 90 작게 · 100 보통 · 115 크게. */
+    var mathTextScale: Int
+        get() = prefs.getInt("mathTextScale", 100)
+        set(v) = prefs.edit().putInt("mathTextScale", v).apply()
+
     /** 📷 사진 문제: 제미나이 모델을 써 볼 순서 (쉼표로). 앞 모델이 막히면 다음 모델로. */
     var geminiModels: String
         get() = prefs.getString("geminiModels", null) ?: DEFAULT_GEMINI_MODELS

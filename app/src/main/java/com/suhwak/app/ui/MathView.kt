@@ -38,7 +38,10 @@ fun MathView(
     val latestPick by rememberUpdatedState(onPick)
     // 휴대폰(짧은 쪽 600dp 미만)은 글자를 줄이고 긴 보기는 한 줄씩
     val phone = androidx.compose.ui.platform.LocalConfiguration.current.smallestScreenWidthDp < 600
-    val html = remember(question, choices, phone) { page(question, choices, phone) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    // 설정의 '문제·보기 글자 크기' (작게 90% · 보통 100% · 크게 115%)
+    val scale = remember { com.suhwak.app.data.StudySettings(context).mathTextScale } / 100f
+    val html = remember(question, choices, phone, scale) { page(question, choices, phone, scale) }
     val state = "S(${selected ?: 0},${answer ?: 0},${if (locked) 1 else 0})"
     AndroidView(
         factory = { ctx ->
@@ -86,9 +89,13 @@ private fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replac
 /** 문장 속 분수가 작게 보이지 않게 \frac -> \dfrac. */
 private fun big(s: String) = s.replace("\\frac", "\\dfrac")
 
-/** 보기 글자 수 (수식 명령·괄호·빈칸 빼고). 분수·연립이 있으면 아주 길게 친다. */
-private fun choiceLen(c: String): Int =
-    if ("\\begin" in c || "\\frac" in c) 99 else c.replace(Regex("""\\[a-zA-Z]+|[${'$'}{}\s]"""), "").length
+/** 보기가 차지하는 폭 (글자 수 기준). 분수는 위·아래 중 긴 쪽만, 연립(\begin)은 아주 길게 친다. */
+internal fun choiceLen(c: String): Int {
+    if ("\\begin" in c) return 99
+    val frac = Regex("""\\[dt]?frac\{([^{}]*)\}\{([^{}]*)\}""")
+    val flat = frac.replace(c) { m -> "#".repeat(maxOf(m.groupValues[1].length, m.groupValues[2].length)) }
+    return flat.replace(Regex("""\\[a-zA-Z]+|[${'$'}{}\s]"""), "").length
+}
 
 /**
  * 보기를 두 칸씩 놓을지: 0 = 한 줄씩, 1 = 태블릿(넓은 화면)에서만 두 칸 (14자 이하), 2 = 휴대폰에서도 두 칸 (7자 이하).
@@ -98,48 +105,54 @@ private fun gridLevel(choices: List<String>): Int {
     if (choices.isEmpty()) return 0
     val longest = choices.maxOf { choiceLen(it) }
     return when {
+        longest <= 4 -> 3
         longest <= 7 -> 2
         longest <= 14 -> 1
         else -> 0
     }
 }
 
-private fun page(question: String, choices: List<String>, phone: Boolean): String {
+private fun page(question: String, choices: List<String>, phone: Boolean, scale: Float = 1f): String {
     val level = gridLevel(choices)
-    val grid = level > 0
     val bodyClass = if (phone) " class=\"ph\"" else ""
+    fun px(v: Int) = "${(v * scale).toInt()}px"
+    // 보기 속 분수는 \frac 그대로 (\dfrac처럼 위아래로 크게 늘이지 않아 카드가 낮다)
     val buttons = choices.mapIndexed { i, c ->
-        val wide = grid && choices.size % 2 == 1 && i == choices.lastIndex
-        """<button class="c${if (wide) " w" else ""}" id="c${i + 1}" onclick="if(!L)Bridge.pick(${i + 1})"><span class="mk">${MARKS.getOrElse(i) { '•' }}</span><span class="ct">${esc(big(c))}</span></button>"""
+        """<button class="c" id="c${i + 1}" onclick="if(!L)Bridge.pick(${i + 1})"><span class="mk">${MARKS.getOrElse(i) { '•' }}</span><span class="ct">${esc(c)}</span></button>"""
     }.joinToString("")
+    val odd = choices.size % 2 == 1
     return """<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <link rel="stylesheet" href="katex.min.css">
 <script src="katex.min.js"></script><script src="auto-render.min.js"></script>
 <style>
 html,body{margin:0;padding:0;background:transparent;color:#222B18;font-family:sans-serif;-webkit-user-select:none;user-select:none}
-.q{font-size:21px;line-height:1.75;word-break:keep-all;padding:18px 18px 20px;margin:0 0 12px;background:#2F4419;color:#fff;border-radius:22px}
-.q .katex{font-size:1.1em}
-.cs{display:flex;flex-direction:column;gap:9px}
-.cs.g{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.g .ct{white-space:nowrap}
-.c{display:flex;gap:12px;align-items:center;text-align:left;background:#fff;border:3px solid #fff;border-radius:18px;padding:10px 14px;font-size:18px;min-height:56px;color:#222B18;font-family:inherit;width:100%;box-sizing:border-box}
-.g .c{justify-content:center;min-height:64px;font-size:20px}
-.g .c.w{grid-column:span 2}
-.c .mk{font-size:17px;color:#5A6448}
+.q{font-size:${px(19)};line-height:1.6;word-break:keep-all;padding:12px 16px 13px;margin:0 0 8px;background:#2F4419;color:#fff;border-radius:18px}
+.q .katex{font-size:1.08em}
+.cs{display:grid;grid-template-columns:1fr;gap:7px}
+.c{display:flex;gap:10px;align-items:center;text-align:left;background:#fff;border:2.5px solid #fff;border-radius:14px;padding:5px 12px;font-size:${px(17)};min-height:46px;color:#222B18;font-family:inherit;width:100%;box-sizing:border-box}
+.c .katex{font-size:1.18em}
+.c .mk{font-size:${px(15)};color:#5A6448}
 .c.on{background:#DCE6C4;border-color:#4B6B2A}.c.on .mk{color:#2F4419;font-weight:700}
 .c.ans{background:#FBE3D5;border-color:#D9622B}.c.ans .mk{color:#A9481B;font-weight:700}
 .c.bad{background:#FDECEC;border-color:#C8372D}
-/* 휴대폰(화면 폭 600dp 미만, body.ph): 글자를 줄이고, 아주 짧은 보기(g2)만 두 칸 */
-.ph .q{font-size:17px;line-height:1.7;padding:14px 16px 16px;border-radius:18px}
-.ph .c{font-size:16px;min-height:50px;padding:8px 12px;border-radius:16px}
-.ph .c .mk{font-size:15px}
-.ph .cs.g:not(.g2){display:flex;flex-direction:column;gap:8px}
-.ph .cs.g:not(.g2) .c{justify-content:flex-start;min-height:50px;font-size:16px}
-.ph .g2 .c{min-height:54px;font-size:17px}
+/* 짧은 보기는 나란히: 폭(이 화면 조각의 너비)에 맞춰 칸 수를 정한다 */
+.l3 .ct,.l2 .ct,.l1 .ct{white-space:nowrap}
+.l3{grid-template-columns:repeat(2,1fr)}
+@media (min-width:300px){.l3{grid-template-columns:repeat(3,1fr)}}
+.l2{grid-template-columns:repeat(2,1fr)}
+@media (min-width:520px){.l1{grid-template-columns:repeat(2,1fr)}}
+.l3 .c,.l2 .c,.l1 .c{gap:6px;padding:5px 8px}
+/* 두 칸일 때 홀수 개면 마지막 보기는 한 줄 전체 */
+.odd.l2 .c:last-child{grid-column:1/-1}
+@media (max-width:299px){.odd.l3 .c:last-child{grid-column:1/-1}}
+@media (min-width:520px){.odd.l1 .c:last-child{grid-column:1/-1}}
+/* 휴대폰: 문제 글자를 조금 더 줄인다 */
+.ph .q{font-size:${px(16)};padding:10px 13px 11px;border-radius:16px}
+.ph .c{font-size:${px(16)};min-height:44px}
 </style></head><body$bodyClass>
 ${if (question.isBlank()) "" else "<div class=\"q\" id=\"q\">" + esc(big(question)) + "</div>"}
-<div class="cs${if (level == 2) " g g2" else if (level == 1) " g" else ""}">$buttons</div>
+<div class="cs${if (level > 0) " l$level" else ""}${if (odd) " odd" else ""}">$buttons</div>
 <script>
 var L=0;
 function S(sel,ans,locked){L=locked;

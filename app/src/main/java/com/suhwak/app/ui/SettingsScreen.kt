@@ -285,6 +285,10 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}, onPhoto: () -> Unit = {}) {
                         Labeled("한 번에 풀 문제") {
                             NumberChoice(size, Opt.session, "문제", 999, min = 0) { size = it; settings.sessionSize = it }
                         }
+                        var mathScale by remember { mutableIntStateOf(settings.mathTextScale) }
+                        Labeled("문제·보기 글자 크기", "풀이 화면의 문제와 보기 글자예요. 작게 하면 풀이 칸이 더 넓어져요") {
+                            Choice(mathScale, listOf(90 to "작게", 100 to "보통", 115 to "크게")) { mathScale = it; settings.mathTextScale = it }
+                        }
                         Labeled("쌍둥이 문제", "3차(빈칸 풀이)까지 간 문제 뒤에 같은 유형 문제를 바로 이어서 내요") {
                             NumberChoice(twins, Opt.twins, "문제", 5, min = 0) { twins = it; settings.twinCount = it }
                         }
