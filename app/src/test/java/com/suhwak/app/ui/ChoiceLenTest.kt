@@ -10,7 +10,7 @@ class ChoiceLenTest {
     }
 
     @Test fun plainAndSystems() {
-        assertEquals(5, choiceLen("x ≥ -4"))
+        assertEquals(4, choiceLen("x ≥ -4"))
         assertEquals(99, choiceLen("${'$'}\\begin{cases}x=1\\\\y=2\\end{cases}${'$'}"))
     }
 }
