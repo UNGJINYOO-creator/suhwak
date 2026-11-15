@@ -43,7 +43,7 @@ class McFirst(context: Context) {
 
         /** 주관식 씨앗을 5지선다로 (보기 순서는 문제마다 늘 같게). 보기를 못 만들면 null. */
         fun asChoice(w: Word): Word? {
-            val wrong = distractors(w.meaning, w.id) ?: return null
+            val wrong = distractors(w.meaning, w.id, w.question.ifBlank { w.text }) ?: return null
             val right = show(w.meaning)
             val rnd = kotlin.random.Random(w.id * 31 + 7)
             val all = (wrong + right).shuffled(rnd)
@@ -70,13 +70,23 @@ class McFirst(context: Context) {
         } ?: v
 
         /** 오답 보기 4개 (서로 다르고 정답과 값이 다름). 만들 수 없는 답이면 null. */
-        fun distractors(answer: String, seed: Long): List<String>? {
+        fun distractors(answer: String, seed: Long, question: String = ""): List<String>? {
             val a = answer.replace(" ", "")
             val rnd = kotlin.random.Random(seed)
+            // 문제에 음수가 나오지 않으면 음수 보기는 만들지 않는다 (한눈에 지울 수 있는 보기는 찍기만 쉬워짐)
+            val noNeg = !answer.contains('-') && !question.contains('-') && !question.contains('−') &&
+                "음수" !in question && "정수" !in question
+            // "40번째 자리의 숫자" 같은 문제: 답이 한 자리 숫자면 다른 한 자리 숫자로
+            val digit = Regex("""^\d$""").matches(a) && ("자리" in question || "숫자" in question)
+            if (digit) {
+                val n = a.toInt()
+                return (0..9).filter { it != n }.sortedBy { kotlin.math.abs(it - n) + rnd.nextInt(3) }.take(4).map { it.toString() }
+            }
+            fun ok(list: List<String>?) = list?.filter { !noNeg || !it.startsWith("-") }?.takeIf { it.size >= 4 }
             PAIR.matchEntire(a)?.let { m ->
                 val (x, xv, y, yv) = m.destructured
-                val xs = (listOf(xv) + (numberWrongs(xv, rnd) ?: return null)).take(3)
-                val ys = (listOf(yv) + (numberWrongs(yv, rnd) ?: return null)).take(3)
+                val xs = (listOf(xv) + (numberWrongs(xv, rnd, noNeg) ?: return null)).take(3)
+                val ys = (listOf(yv) + (numberWrongs(yv, rnd, noNeg) ?: return null)).take(3)
                 val pairs = mutableListOf<Pair<String, String>>()
                 if (xv != yv) pairs += yv to xv // x와 y를 바꿔 쓴 실수
                 for (i in xs) for (j in ys) if (!(i == xv && j == yv)) pairs += i to j
@@ -85,20 +95,20 @@ class McFirst(context: Context) {
                 return picked.map { (i, j) -> "$x=${num(i)}, $y=${num(j)}" }
             }
             VAR.matchEntire(a)?.let { m ->
-                return numberWrongs(m.groupValues[2], rnd)?.take(4)?.map { "${m.groupValues[1]}=${num(it)}" }
+                return ok(numberWrongs(m.groupValues[2], rnd, noNeg))?.take(4)?.map { "${m.groupValues[1]}=${num(it)}" }
             }
-            return numberWrongs(a, rnd)?.take(4)?.map { num(it) }
+            return ok(numberWrongs(a, rnd, noNeg))?.take(4)?.map { num(it) }
         }
 
         /** 수 하나의 그럴듯한 오답들 (가까운 수, 부호 실수, 두 배 등; 분수는 뒤집기·분자/분모 하나 차이). */
-        private fun numberWrongs(v: String, rnd: kotlin.random.Random): List<String>? {
+        private fun numberWrongs(v: String, rnd: kotlin.random.Random, noNeg: Boolean = false): List<String>? {
             val out = linkedSetOf<String>()
             when {
                 INT.matches(v) -> {
                     val n = v.toLong()
-                    val near = listOf(n + 1, n - 1, n + 2, n - 2, n * 2, n + 10, n - 10, n + 3)
-                    val first = if (n != 0L) listOf(-n) else emptyList()
-                    (first + near.shuffled(rnd)).forEach { if (it != n) out += it.toString() }
+                    val near = listOf(n + 1, n - 1, n + 2, n - 2, n * 2, n + 10, n - 10, n + 3, n + 4, n * 3)
+                    val first = if (n != 0L && !noNeg) listOf(-n) else emptyList()
+                    (first + near.shuffled(rnd)).forEach { if (it != n && !(noNeg && it < 0)) out += it.toString() }
                 }
                 DEC.matches(v) -> {
                     val x = java.math.BigDecimal(v)
@@ -107,8 +117,8 @@ class McFirst(context: Context) {
                         x.negate(), x + step, x - step, x.movePointRight(1), x.movePointLeft(1),
                         x + step + step, x + java.math.BigDecimal.ONE, x - java.math.BigDecimal.ONE,
                     )
-                    (listOf(cands[0]) + cands.drop(1).shuffled(rnd)).forEach { c ->
-                        if (c.compareTo(x) != 0) out += c.stripTrailingZeros().toPlainString()
+                    ((if (noNeg) emptyList() else listOf(cands[0])) + cands.drop(1).shuffled(rnd)).forEach { c ->
+                        if (c.compareTo(x) != 0 && !(noNeg && c.signum() < 0)) out += c.stripTrailingZeros().toPlainString()
                     }
                 }
                 FRAC.matches(v) -> {
@@ -117,9 +127,10 @@ class McFirst(context: Context) {
                     if (q == 0L) return null
                     val neg = sign == "-"
                     fun f(a: Long, b: Long, minus: Boolean = neg) = if (a <= 0 || b <= 1 || a % b == 0L) null else "${if (minus) "-" else ""}$a/$b"
-                    val cands = listOfNotNull(f(p, q, !neg), f(q, p), f(p + 1, q), f(p, q + 1), f(p - 1, q), f(p, q - 1), f(p * 2, q), f(p + q, q), f(p + 2, q), f(p, q + 2), f(p + 1, q + 1), f(p * 2, q + 1))
+                    val cands = listOfNotNull(if (noNeg) null else f(p, q, !neg), f(q, p), f(p + 1, q), f(p, q + 1), f(p - 1, q), f(p, q - 1), f(p * 2, q), f(p + q, q), f(p + 2, q), f(p, q + 2), f(p + 1, q + 1), f(p * 2, q + 1))
                     val value = (if (neg) -1.0 else 1.0) * p / q
                     (listOf(cands[0]) + cands.drop(1).shuffled(rnd)).forEach { c ->
+                        if (noNeg && c.startsWith("-")) return@forEach
                         val m = FRAC.matchEntire(c)!!
                         val cv = (if (m.groupValues[1] == "-") -1.0 else 1.0) * m.groupValues[2].toLong() / m.groupValues[3].toLong()
                         if (abs(cv - value) > 1e-12 && out.none { o -> FRAC.matchEntire(o)?.let { om -> abs((if (om.groupValues[1] == "-") -1.0 else 1.0) * om.groupValues[2].toLong() / om.groupValues[3].toLong() - cv) < 1e-12 } == true }) out += c

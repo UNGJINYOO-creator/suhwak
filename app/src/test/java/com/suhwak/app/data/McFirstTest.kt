@@ -51,4 +51,20 @@ class McFirstTest {
         // 같은 문제는 늘 같은 순서
         assertEquals(mc.choices, McFirst.asChoice(w)!!.choices)
     }
+
+    @Test fun digitQuestionsUseDigits() {
+        val d = McFirst.distractors("1", 9, "분수 5/37을 소수로 나타낼 때, 소수점 아래 40번째 자리의 숫자를 구하시오.")!!
+        assertEquals(4, d.size)
+        assertTrue(d.all { it.length == 1 && it[0].isDigit() && it != "1" })
+    }
+
+    @Test fun noNegativeWhenQuestionHasNone() {
+        for (seed in 1L..20L) {
+            val d = McFirst.distractors("12", seed, "어떤 수를 구하시오.")!!
+            assertTrue(d.toString(), d.none { it.startsWith("-") })
+            val f = McFirst.distractors("3/8", seed, "기약분수로 나타내시오.")!!
+            assertTrue(f.toString(), f.none { it.contains("-") })
+        }
+        assertTrue(McFirst.distractors("5", 1, "x - 3 = 2 일 때")!!.isNotEmpty())
+    }
 }
