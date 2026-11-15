@@ -30,7 +30,7 @@ object FamilySync {
     private val PREF_FILES = listOf(
         "game", "giant", "fishing", "daily", "history", "wrongNote", "masterCheck", "study", "alerts", "digest", "guides", "rewards",
         // 수학: 유형 간격 복습, 다시 볼 유형, 단원 종합시험 점수, 농장 기록, 가족 기기 목록
-        "typeReview", "weakTypes", "unitExam", "farm", "devices",
+        "typeReview", "weakTypes", "unitExam", "farm", "devices", "mcFirst",
     )
     /** Files merged key by key against the last synced copy: whichever device changed a key wins it. */
     private val BY_CHANGE = setOf("study", "alerts", "guides", "rewards")

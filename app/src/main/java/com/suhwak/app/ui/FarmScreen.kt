@@ -134,7 +134,9 @@ class FarmViewModel(app: Application) : AndroidViewModel(app) {
                 list.removeFirstOrNull()?.let { picked += it }
             }
         }
-        questions.clear(); questions.addAll(picked)
+        // 객관식 먼저: 아직 주관식이 열리지 않은 유형은 객관식으로 (게임은 기록을 세지 않고 모양만 따른다)
+        val mcFirst = com.suhwak.app.data.McFirst(getApplication())
+        questions.clear(); questions.addAll(picked.map { mcFirst.view(it) })
         plots.clear(); repeat(settings.farmPlots.coerceIn(2, 12)) { plots += 0 }
         index = 0; combo = 0; right = 0; harvested = 0; feedback = null
         phase = Phase.PLAYING
@@ -149,7 +151,14 @@ class FarmViewModel(app: Application) : AndroidViewModel(app) {
         feedback = when {
             correct && combo > 0 && combo % 3 == 0 -> "🔥 ${combo}콤보! 두 번 자랐어요"
             correct -> "⭕ 맞혔어요! 💧 물을 줬어요"
-            else -> "❌ 정답은 ${MathText.plain(word.meaning)} · 싹 하나가 시들었어요"
+            else -> {
+                // 객관식이면 "③ 3/8"처럼 보기 내용까지
+                val shown = if (word.qtype == "mc") {
+                    val i = "①②③④⑤".indexOf(word.meaning.trim().firstOrNull() ?: ' ')
+                    word.meaning.trim() + (com.suhwak.app.data.SeedImport.choicesOf(word).getOrNull(i)?.let { " " + MathText.plain(it) } ?: "")
+                } else MathText.plain(word.meaning)
+                "❌ 정답은 $shown · 싹 하나가 시들었어요"
+            }
         }
         val allRipe = plots.all { it >= Farm.RIPE }
         if (index + 1 >= questions.size || allRipe) {

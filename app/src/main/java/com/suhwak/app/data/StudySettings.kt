@@ -230,6 +230,11 @@ class StudySettings(context: Context) {
         get() = prefs.getInt("farmPlots", 6)
         set(v) = prefs.edit().putInt("farmPlots", v).apply()
 
+    /** 객관식 먼저: 유형마다 객관식을 1차에 이만큼(서로 다른 문제) 맞혀야 그 유형의 주관식이 나온다. 0 = 끔(원래 모양대로). */
+    var mcBeforeShort: Int
+        get() = prefs.getInt("mcBeforeShort", 3)
+        set(v) = prefs.edit().putInt("mcBeforeShort", v).apply()
+
     /** 풀이 화면의 문제·보기 글자 크기 (%): 90 작게 · 100 보통 · 115 크게. */
     var mathTextScale: Int
         get() = prefs.getInt("mathTextScale", 100)

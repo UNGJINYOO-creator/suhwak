@@ -285,6 +285,21 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
     /** 모든 씨앗 (쌍둥이·다시 보기 문제를 고르는 곳). */
     private var allSeeds = listOf<Word>()
     private val weakTypes = WeakTypes(app)
+    private val mcFirst = com.suhwak.app.data.McFirst(app)
+    private var viewTurn = -1
+    private var viewWord: Word? = null
+
+    /**
+     * 풀이 화면에 보여줄 모양 (객관식 먼저): 아직 객관식 단련이 덜 된 유형의 주관식은 보기 5개짜리 객관식으로.
+     * 한 문제를 푸는 동안(같은 turn)에는 모양이 바뀌지 않게 기억해 둔다. DB의 문제는 그대로다.
+     */
+    fun shown(word: Word): Word {
+        if (viewTurn != turn || viewWord?.id != word.id) {
+            viewWord = mcFirst.view(word)
+            viewTurn = turn
+        }
+        return viewWord!!
+    }
     private val typeReview = com.suhwak.app.data.TypeReview(app)
     /** 🧪 테스트 모드(이 기기만): 풀어 볼 수는 있지만 기록·열매·복습·오답노트·학습 시간을 남기지 않는다. */
     val testMode = settings.testMode
@@ -934,6 +949,11 @@ class StudyViewModel(app: Application, handle: SavedStateHandle) : AndroidViewMo
      */
     private fun afterSolve(word: Word, guessed: Boolean): List<Word> {
         val firstTry = solveTries == 1 && !guessed
+        // 객관식 먼저: 객관식(원래 것이든 바꾼 것이든)을 1차에 맞히면 세고, 다 차면 그 유형 주관식이 열린다
+        val askedMc = (viewWord?.takeIf { it.id == word.id } ?: word).qtype == "mc"
+        if (firstTry && askedMc && !testMode && word.pos.isNotBlank() && mcFirst.record(word)) {
+            celebrate("🔓 '${word.pos}' 이제 주관식에도 도전해요!")
+        }
         // 풀이를 보고서야 맞힌 문제(4): 쌍둥이와 별개로 다음 날에도 한 번 더 (다시 볼 유형)
         if (solveTries == 4 && settings.weakDaily > 0 && word.pos.isNotBlank()) {
             if (!testMode) weakTypes.add(word.pos)
@@ -1223,7 +1243,7 @@ fun StudyScreen(
                         key(vm.turn) {
                             when (vm.mode) {
                                 StudyMode.SOLVE -> SolveQuiz(
-                                    word = word,
+                                    word = vm.shown(word),
                                     number = vm.doneCount + 1,
                                     onAnswered = vm::solveAnswered,
                                     fastMs = vm.fastMs(word),

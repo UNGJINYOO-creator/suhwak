@@ -70,9 +70,11 @@ object ProgressReset {
                     }
                 }
             }
+            // 객관식 먼저: 초기화한 유형은 다시 객관식부터
+            prefs(context, McFirst.PREFS).edit().apply { concepts.forEach { remove(it) } }.apply()
             val check = prefs(context, "masterCheck")
             check.edit().putStringSet("ids", check.getStringSet("ids", emptySet())!! - ids).apply()
-            touched += listOf("history", "daily", "wrongNote", "masterCheck", "typeReview", "weakTypes")
+            touched += listOf("history", "daily", "wrongNote", "masterCheck", "typeReview", "weakTypes", McFirst.PREFS)
         }
         if (choice.fish) {
             prefs(context, "game").edit().remove("earned").remove("spent").remove("coupons").remove("badges").apply()

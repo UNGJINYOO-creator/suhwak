@@ -285,6 +285,10 @@ fun SettingsScreen(onAdd: (AddKind) -> Unit = {}, onPhoto: () -> Unit = {}) {
                         Labeled("한 번에 풀 문제") {
                             NumberChoice(size, Opt.session, "문제", 999, min = 0) { size = it; settings.sessionSize = it }
                         }
+                        var mcBefore by remember { mutableIntStateOf(settings.mcBeforeShort) }
+                        Labeled("객관식 먼저", "주관식 문제도 처음엔 앱이 만든 보기 5개로 객관식으로 내요. 그 유형 객관식을 힌트 없이 1차에 이만큼 맞히면 주관식으로 나와요") {
+                            NumberChoice(mcBefore, listOf(0 to "끔", 2 to "2문제", 3 to "3문제", 5 to "5문제"), "문제", 20, min = 0) { mcBefore = it; settings.mcBeforeShort = it }
+                        }
                         var mathScale by remember { mutableIntStateOf(settings.mathTextScale) }
                         Labeled("문제·보기 글자 크기", "풀이 화면의 문제와 보기 글자예요. 작게 하면 풀이 칸이 더 넓어져요") {
                             Choice(mathScale, listOf(90 to "작게", 100 to "보통", 115 to "크게")) { mathScale = it; settings.mathTextScale = it }
