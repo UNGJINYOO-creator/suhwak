@@ -142,7 +142,7 @@ fun SolvePad(key: Any, onActivity: () -> Unit, modifier: Modifier = Modifier, mi
         }
         val tools: @Composable () -> Unit = {
             PadTool.entries.forEach { t -> PadButton(t.icon, t.label, selected = tool == t) { tool = t } }
-            PadButton("↶", "되돌리기", selected = false) { if (strokes.isNotEmpty()) strokes.removeAt(strokes.lastIndex) }
+            PadButton("↩️", "되돌리기", selected = false) { if (strokes.isNotEmpty()) strokes.removeAt(strokes.lastIndex) }
             PadButton("🗑️", "전체 지우기", selected = false) { strokes.clear() }
         }
         val strip = Modifier.padding(6.dp).clip(RoundedCornerShape(22.dp)).background(Sea.Panel.copy(alpha = 0.94f)).padding(4.dp)
